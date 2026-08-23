@@ -116,16 +116,31 @@ func InstallSkill(targetDir string) error {
 }
 
 // InstallRules writes the global/local rules to their respective directories
-func InstallRules(homeDir string) error {
-	rulesDirs := []string{
-		filepath.Join(homeDir, ".gemini", "config", "rules"),
-		filepath.Join(homeDir, ".cursor", "rules"),
-		filepath.Join(homeDir, ".claude", "rules"),
-		filepath.Join(homeDir, ".config", "opencode", "rules"),
-		filepath.Join(homeDir, ".hermes", "rules"),
+func InstallRules(homeDir string, allowedHarnesses []string) error {
+	rulesDirs := map[string]string{
+		"antigravity": filepath.Join(homeDir, ".gemini", "config", "rules"),
+		"cursor":      filepath.Join(homeDir, ".cursor", "rules"),
+		"claude":      filepath.Join(homeDir, ".claude", "rules"),
+		"opencode":    filepath.Join(homeDir, ".config", "opencode", "rules"),
+		"hermes":      filepath.Join(homeDir, ".hermes", "rules"),
 	}
 
-	for _, dir := range rulesDirs {
+	harnessAllowed := func(h string) bool {
+		if len(allowedHarnesses) == 0 {
+			return true
+		}
+		for _, ah := range allowedHarnesses {
+			if ah == h || ah == "all" {
+				return true
+			}
+		}
+		return false
+	}
+
+	for harness, dir := range rulesDirs {
+		if !harnessAllowed(harness) {
+			continue
+		}
 		parentDir := filepath.Dir(dir)
 		if _, err := os.Stat(parentDir); err == nil {
 			_ = os.MkdirAll(dir, 0755)
@@ -134,11 +149,13 @@ func InstallRules(homeDir string) error {
 		}
 	}
 
-	// Instalar en local si .agents existe
-	if _, err := os.Stat(".agents"); err == nil {
-		localRules := filepath.Join(".agents", "rules")
-		_ = os.MkdirAll(localRules, 0755)
-		_ = os.WriteFile(filepath.Join(localRules, "cogni.rules.md"), []byte(RuleContent), 0644)
+	// Instalar en local si .agents existe y está permitido
+	if harnessAllowed("local") || harnessAllowed("workspace") {
+		if _, err := os.Stat(".agents"); err == nil {
+			localRules := filepath.Join(".agents", "rules")
+			_ = os.MkdirAll(localRules, 0755)
+			_ = os.WriteFile(filepath.Join(localRules, "cogni.rules.md"), []byte(RuleContent), 0644)
+		}
 	}
 
 	return nil
@@ -198,9 +215,21 @@ func GetHarnessMCPPaths(homeDir string) map[string][]string {
 }
 
 // ConfigureHarnessMCP inyecta automáticamente el servidor MCP 'cogni' en las configuraciones de MCP
-func ConfigureHarnessMCP(homeDir string) map[string]string {
+func ConfigureHarnessMCP(homeDir string, allowedHarnesses []string) map[string]string {
 	mcpConfigs := GetHarnessMCPPaths(homeDir)
 	configured := make(map[string]string)
+
+	harnessAllowed := func(h string) bool {
+		if len(allowedHarnesses) == 0 {
+			return true
+		}
+		for _, ah := range allowedHarnesses {
+			if ah == h || ah == "all" {
+				return true
+			}
+		}
+		return false
+	}
 
 	cogniBin := "cogni"
 	localBin := filepath.Join(homeDir, ".local", "bin", "cogni")
@@ -214,6 +243,9 @@ func ConfigureHarnessMCP(homeDir string) map[string]string {
 	}
 
 	for harness, paths := range mcpConfigs {
+		if !harnessAllowed(harness) {
+			continue
+		}
 		for _, cfgPath := range paths {
 			parentDir := filepath.Dir(cfgPath)
 			// Solo configurar si el directorio padre del arnés existe (evita crear carpetas fantasmas)
@@ -228,14 +260,16 @@ func ConfigureHarnessMCP(homeDir string) map[string]string {
 		}
 	}
 
-	// También configurar en workspace local si .agents/ existe
-	if _, err := os.Stat(".agents"); err == nil {
-		localMCP := filepath.Join(".agents", "mcp_config.json")
-		if err := injectMCPServer(localMCP, "cogni", map[string]any{
-			"command": "cogni",
-			"args":    []string{"mcp"},
-		}); err == nil {
-			configured["workspace"] = localMCP
+	// También configurar en workspace local si .agents/ existe y está permitido
+	if harnessAllowed("local") || harnessAllowed("workspace") {
+		if _, err := os.Stat(".agents"); err == nil {
+			localMCP := filepath.Join(".agents", "mcp_config.json")
+			if err := injectMCPServer(localMCP, "cogni", map[string]any{
+				"command": "cogni",
+				"args":    []string{"mcp"},
+			}); err == nil {
+				configured["workspace"] = localMCP
+			}
 		}
 	}
 

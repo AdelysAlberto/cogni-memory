@@ -190,6 +190,32 @@ func promptAndInstallSkills(autoAll bool) {
 
 	harnesses := core.GetHarnessSkillPaths(home)
 
+	// Intentar cargar configuración guardada previa
+	cfg, _ := core.LoadConfig(home)
+	if autoAll && cfg != nil && len(cfg.SelectedHarnesses) > 0 {
+		fmt.Println("🔄 Cogni Upgrade: Actualizando arneses configurados previamente...")
+		for _, h := range cfg.SelectedHarnesses {
+			if paths, ok := harnesses[h]; ok {
+				for _, p := range paths {
+					_ = core.InstallSkill(p)
+				}
+				fmt.Printf("  -> Skill actualizada para: %s\n", h)
+			}
+		}
+
+		_ = core.InstallRules(home, cfg.SelectedHarnesses)
+		fmt.Println("📜 Reglas globales (Invariants) actualizadas.")
+
+		mcpResults := core.ConfigureHarnessMCP(home, cfg.SelectedHarnesses)
+		if len(mcpResults) > 0 {
+			fmt.Println("🔌 Servidores MCP actualizados automáticamente:")
+			for harness, cfgPath := range mcpResults {
+				fmt.Printf("  -> [%s] Servidor MCP registrado en: %s\n", harness, cfgPath)
+			}
+		}
+		return
+	}
+
 	choice := ""
 	if autoAll {
 		choice = "8"
@@ -214,43 +240,53 @@ func promptAndInstallSkills(autoAll bool) {
 		}
 	}
 
+	var selectedHarnesses []string
+
 	switch choice {
 	case "1":
+		selectedHarnesses = []string{"local"}
 		for _, p := range harnesses["local"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en: %s\n", p)
 		}
 	case "2":
+		selectedHarnesses = []string{"antigravity"}
 		for _, p := range harnesses["antigravity"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Antigravity: %s\n", p)
 		}
 	case "3":
+		selectedHarnesses = []string{"cursor"}
 		for _, p := range harnesses["cursor"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Cursor: %s\n", p)
 		}
 	case "4":
+		selectedHarnesses = []string{"claude"}
 		for _, p := range harnesses["claude"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Claude: %s\n", p)
 		}
 	case "5":
+		selectedHarnesses = []string{"opencode"}
 		for _, p := range harnesses["opencode"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en OpenCode: %s\n", p)
 		}
 	case "6":
+		selectedHarnesses = []string{"copilot"}
 		for _, p := range harnesses["copilot"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Copilot: %s\n", p)
 		}
 	case "7":
+		selectedHarnesses = []string{"hermes"}
 		for _, p := range harnesses["hermes"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Hermes: %s\n", p)
 		}
 	case "8":
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
 		fmt.Println("🚀 Registrando Skill de Cogni en todos los arneses de IA...")
 		for name, paths := range harnesses {
 			for _, p := range paths {
@@ -262,6 +298,7 @@ func promptAndInstallSkills(autoAll bool) {
 		fmt.Println("⏭️ Instalación de Skill omitida.")
 		return
 	default:
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
 		fmt.Println("🚀 Opción por defecto: Registrando en todos los arneses...")
 		for name, paths := range harnesses {
 			for _, p := range paths {
@@ -271,15 +308,18 @@ func promptAndInstallSkills(autoAll bool) {
 		}
 	}
 
+	// Persistir la selección de arneses para futuras actualizaciones
+	_ = core.SaveConfig(home, &core.Config{SelectedHarnesses: selectedHarnesses})
+
 	fmt.Println("✨ Skills de Cogni configuradas y listas para usar con tus Agentes de IA.")
 
 	// Instalar reglas globales activas de forma automática
-	if err := core.InstallRules(home); err == nil {
+	if err := core.InstallRules(home, selectedHarnesses); err == nil {
 		fmt.Println("📜 Reglas globales (Invariants) inyectadas en los directorios de Rules.")
 	}
 
 	// Configurar servidores MCP automáticamente en todos los arneses detectados
-	mcpResults := core.ConfigureHarnessMCP(home)
+	mcpResults := core.ConfigureHarnessMCP(home, selectedHarnesses)
 	if len(mcpResults) > 0 {
 		fmt.Println("🔌 Servidores MCP configurados automáticamente:")
 		for harness, cfgPath := range mcpResults {
