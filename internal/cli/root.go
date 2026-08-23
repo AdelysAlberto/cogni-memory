@@ -273,6 +273,11 @@ func promptAndInstallSkills(autoAll bool) {
 
 	fmt.Println("✨ Skills de Cogni configuradas y listas para usar con tus Agentes de IA.")
 
+	// Instalar reglas globales activas de forma automática
+	if err := core.InstallRules(home); err == nil {
+		fmt.Println("📜 Reglas globales (Invariants) inyectadas en los directorios de Rules.")
+	}
+
 	// Configurar servidores MCP automáticamente en todos los arneses detectados
 	mcpResults := core.ConfigureHarnessMCP(home)
 	if len(mcpResults) > 0 {

@@ -88,6 +88,22 @@ Include 3 to 5 lowercase, kebab-case tags:
 ` + "```bash\n# 1. Save / Upsert structured memory\ncogni save \\\n  --topic-key \"arch/auth/jwt\" \\\n  --title \"JWT Refresh Token Rotation\" \\\n  --category \"architecture\" \\\n  --tags \"auth,jwt,security\" \\\n  --summary \"What: Added refresh token rotation with blacklist | Why: Mitigates token replay | Where: src/auth/jwt.go | Learned: Requires redis TTL sync\"\n\n# 2. Search memories (Compact 1-line preview)\ncogni search --query \"jwt\"\n\n# 3. Retrieve full memory content (Phase 2)\ncogni get arch/auth/jwt\n# or: cogni get --id 6\n\n# 4. Update memory by ID\ncogni update --id 6 --summary \"What: ... | Why: ... | Where: ... | Learned: ...\"\n\n# 5. Start native MCP stdio server\ncogni mcp\n\n# 6. Open visual web dashboard\ncogni ui\n```" + `
 `
 
+// RuleContent defines the mandatory behavior directives for the agent
+const RuleContent = `# 🧠 Cogni Memory Invariants
+
+## 🔍 1. Preflight Search (Mandatory)
+- Before proposing, designing, or implementing a new feature, database schema, API route, state store, or non-trivial logic, execute **` + "`cogni_search`" + `** (MCP tool) or **` + "`cogni search`" + `** (CLI) for the domain keyword.
+- If previous memories are retrieved:
+  - Adhere strictly to the established patterns, configurations, and decisions.
+  - Hydrate only the relevant memories using **` + "`cogni_get`" + `** or **` + "`cogni get`" + `**.
+
+## 💾 2. Postflight Save Gate (Mandatory)
+- Before completing any high-signal task (e.g. bugfix with non-obvious cause, architectural decision, library selection, build setup, coding standard), save or update it in memory.
+- Use a deterministic **` + "`topic_key`" + `** (format: ` + "`<domain>/<subdomain>/<topic>`" + `, ej. ` + "`arch/auth/jwt`" + `) so that subsequent runs **upsert** existing records instead of generating duplicates.
+- Structure every summary strictly as: ` + "`What: ... | Why: ... | Where: ... | Learned: ...`" + `
+- Tags must follow the 3-layer taxonomy: main concept, tech stack, specific module.
+`
+
 // InstallSkill writes the embedded SKILL.md to the specified directory
 func InstallSkill(targetDir string) error {
 	skillDir := filepath.Join(targetDir, "cogni")
@@ -97,6 +113,35 @@ func InstallSkill(targetDir string) error {
 
 	dest := filepath.Join(skillDir, "SKILL.md")
 	return os.WriteFile(dest, []byte(SkillContent), 0644)
+}
+
+// InstallRules writes the global/local rules to their respective directories
+func InstallRules(homeDir string) error {
+	rulesDirs := []string{
+		filepath.Join(homeDir, ".gemini", "config", "rules"),
+		filepath.Join(homeDir, ".cursor", "rules"),
+		filepath.Join(homeDir, ".claude", "rules"),
+		filepath.Join(homeDir, ".config", "opencode", "rules"),
+		filepath.Join(homeDir, ".hermes", "rules"),
+	}
+
+	for _, dir := range rulesDirs {
+		parentDir := filepath.Dir(dir)
+		if _, err := os.Stat(parentDir); err == nil {
+			_ = os.MkdirAll(dir, 0755)
+			dest := filepath.Join(dir, "cogni.rules.md")
+			_ = os.WriteFile(dest, []byte(RuleContent), 0644)
+		}
+	}
+
+	// Instalar en local si .agents existe
+	if _, err := os.Stat(".agents"); err == nil {
+		localRules := filepath.Join(".agents", "rules")
+		_ = os.MkdirAll(localRules, 0755)
+		_ = os.WriteFile(filepath.Join(localRules, "cogni.rules.md"), []byte(RuleContent), 0644)
+	}
+
+	return nil
 }
 
 // GetHarnessSkillPaths returns all supported AI harness skill directory paths

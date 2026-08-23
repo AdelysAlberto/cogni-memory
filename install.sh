@@ -154,6 +154,7 @@ else
 fi
 
 SKILL_SOURCE="$REPO_DIR/SKILL.md"
+RULE_SOURCE="$REPO_DIR/rules/cogni.rules.md"
 
 echo ""
 echo "🤖 Selecciona el entorno o Harness de IA que utilizas:"
@@ -181,42 +182,65 @@ fi
 
 # ─── Módulo: Gemini Antigravity ─────────────────────────────────────────────
 # Skills:  ~/.gemini/config/skills/<name>/SKILL.md
+# Rules:   ~/.gemini/config/rules/cogni.rules.md
 install_antigravity() {
     local skills_dir="$HOME_DIR/.gemini/config/skills"
-    echo "  -> [Gemini Antigravity] Skills: $skills_dir/cogni/"
-    mkdir -p "$skills_dir/cogni" "$skills_dir/agent-memory"
+    local rules_dir="$HOME_DIR/.gemini/config/rules"
+    echo "  -> [Gemini Antigravity] Skills: $skills_dir/cogni/ | Rules: $rules_dir/"
+    mkdir -p "$skills_dir/cogni" "$skills_dir/agent-memory" "$rules_dir"
     cp -f "$SKILL_SOURCE" "$skills_dir/cogni/SKILL.md"
     cp -f "$SKILL_SOURCE" "$skills_dir/agent-memory/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
+    fi
 }
 
 # ─── Módulo: Cursor IDE ──────────────────────────────────────────────────────
 # Skills:  ~/.cursor/skills/<name>/SKILL.md
+# Rules:   ~/.cursor/rules/cogni.rules.md
 install_cursor() {
     local skills_dir="$HOME_DIR/.cursor/skills"
-    echo "  -> [Cursor IDE] Skills: $skills_dir/cogni/"
-    mkdir -p "$skills_dir/cogni"
+    local rules_dir="$HOME_DIR/.cursor/rules"
+    echo "  -> [Cursor IDE] Skills: $skills_dir/cogni/ | Rules: $rules_dir/"
+    mkdir -p "$skills_dir/cogni" "$rules_dir"
     cp -f "$SKILL_SOURCE" "$skills_dir/cogni/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
+    fi
 }
 
 # ─── Módulo: OpenCode ────────────────────────────────────────────────────────
 # Skills:  ~/.config/opencode/skills/<name>/SKILL.md
 #          ~/.agents/skills/<name>/SKILL.md
+# Rules:   ~/.config/opencode/rules/cogni.rules.md
+#          ~/.agents/rules/cogni.rules.md
 install_opencode() {
     local skills_dir1="$HOME_DIR/.config/opencode/skills"
     local skills_dir2="$HOME_DIR/.agents/skills"
+    local rules_dir1="$HOME_DIR/.config/opencode/rules"
+    local rules_dir2="$HOME_DIR/.agents/rules"
     echo "  -> [OpenCode] Skills: $skills_dir1/cogni/ y $skills_dir2/cogni/"
-    mkdir -p "$skills_dir1/cogni" "$skills_dir2/cogni"
+    mkdir -p "$skills_dir1/cogni" "$skills_dir2/cogni" "$rules_dir1" "$rules_dir2"
     cp -f "$SKILL_SOURCE" "$skills_dir1/cogni/SKILL.md"
     cp -f "$SKILL_SOURCE" "$skills_dir2/cogni/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir1/cogni.rules.md"
+        cp -f "$RULE_SOURCE" "$rules_dir2/cogni.rules.md"
+    fi
 }
 
 # ─── Módulo: Agentes Estándar / Agentic CLI ──────────────────────────────────
 # Skills:  ~/.agents/skills/<name>/SKILL.md
+# Rules:   ~/.agents/rules/cogni.rules.md
 install_agents_std() {
     local skills_dir="$HOME_DIR/.agents/skills"
-    echo "  -> [Agentes Estándar] Skills: $skills_dir/cogni/"
-    mkdir -p "$skills_dir/cogni"
+    local rules_dir="$HOME_DIR/.agents/rules"
+    echo "  -> [Agentes Estándar] Skills: $skills_dir/cogni/ | Rules: $rules_dir/"
+    mkdir -p "$skills_dir/cogni" "$rules_dir"
     cp -f "$SKILL_SOURCE" "$skills_dir/cogni/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
+    fi
 }
 
 # ─── Módulo: GitHub Copilot (VS Code) ────────────────────────────────────────
@@ -269,11 +293,16 @@ EOF
 
 # ─── Módulo: Hermes CLI ──────────────────────────────────────────────────────
 # Skills:  ~/.hermes/skills/<name>/SKILL.md
+# Rules:   ~/.hermes/rules/cogni.rules.md
 install_hermes() {
     local skills_dir="$HOME_DIR/.hermes/skills"
-    echo "  -> [Hermes CLI] Skills: $skills_dir/cogni/"
-    mkdir -p "$skills_dir/cogni"
+    local rules_dir="$HOME_DIR/.hermes/rules"
+    echo "  -> [Hermes CLI] Skills: $skills_dir/cogni/ | Rules: $rules_dir/"
+    mkdir -p "$skills_dir/cogni" "$rules_dir"
     cp -f "$SKILL_SOURCE" "$skills_dir/cogni/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
+    fi
 }
 
 case $HARNESS_CHOICE in
