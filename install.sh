@@ -295,10 +295,10 @@ case $HARNESS_CHOICE in
     8) echo "⏭️ Instalación de skill omitida." ;;
 esac
 
-# Inicializar base de datos global
+# Inicializar base de datos global y configurar MCP Servers
 echo ""
-echo "🗄️ Inicializando almacenamiento SQLite de Cogni..."
-"$BIN_INSTALL_DIR/cogni" init --global --no-skills
+echo "🗄️ Inicializando almacenamiento SQLite y configurando Servidores MCP..."
+"$BIN_INSTALL_DIR/cogni" init --all
 
 echo ""
 echo "✅ [Cogni] ¡Instalación completada con éxito!"

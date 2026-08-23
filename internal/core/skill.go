@@ -2,6 +2,7 @@ package core
 
 import (
 	_ "embed"
+	"encoding/json"
 	"os"
 	"path/filepath"
 )
@@ -24,66 +25,67 @@ Its primary objective is to maintain architectural consistency across chat sessi
 
 ## ⚡ Autonomous Agent Operating Directives
 
-### 1. Auto-Retrieval / When to Search (Reactive & Proactive Search)
-- **Reactive Search**: Execute ` + "`cogni search --query \"<keywords>\"`" + ` immediately when the user asks to recall past work (e.g., "remember", "recall", "what did we do", "how did we solve").
-- **Proactive Search**: Before proposing or designing any new technical pattern, component, or architecture (e.g., pagination, auth, tables, state management, middleware):
-  ` + "```bash\n  cogni search --query \"<concept_or_topic>\"\n  ```" + `
-- **Pre-fix Search (Mandatory for non-trivial bugfixes)**: Before implementing a non-trivial bugfix, execute at least one targeted search for the failing area (error, module, or stack trace keyword).
-- If a relevant previous signature exists, **adopt and adhere to the same technical pattern**, conventions, and previously approved architectural decisions.
-- **MANDATORY CHAT NOTIFICATION ON RETRIEVAL**: When retrieved memories influence your response, append a 1-line confirmation:
-  ` + "`🧠 **Memoria Recuperada**: [<project_name>] \"<retrieved_title_or_topic>\" (Tags: #tag1, #tag2)`" + `
+### 1. Two-Step Retrieval Protocol (Token Optimization)
+To prevent context inflation, retrieval ALWAYS follows two distinct phases:
 
-### 1.1 Copilot/Agent Enforcement (No Silent Substitution)
-- If ` + "`cogni`" + ` CLI is available, **do not substitute** Cogni operations with internal agent memory systems (` + "`memory.create`" + `, hidden notes, scratchpad-only memory).
-- Internal memory can be used only as a temporary buffer, never as the final persistence layer for high-signal events.
-- If CLI is unavailable or fails, explicitly disclose fallback in chat with the reason and exact failed command.
+- **Step 1: Lightweight Search (Discovery)**
+  Run a compact search to inspect matching titles, categories, tags, and 1-line previews:
+  ` + "```bash\n  cogni search --query \"<keywords>\" \n  # Or via MCP Tool: cogni_search(query: \"...\")\n  ```" + `
+- **Step 2: Full Content Hydration (Only for relevant IDs/Keys)**
+  Retrieve the complete synthetic signature only for the chosen ID or TopicKey:
+  ` + "```bash\n  cogni get <id_or_topic_key>\n  # Or via MCP Tool: cogni_get(id: 6) / cogni_get(topic_key: \"arch/auth/jwt\")\n  ```" + `
 
-### 2. When to Save & High-Signal Threshold (Mandatory Triggers)
-**GOLDEN RULE**: Call ` + "`cogni save`" + ` ONLY if the answer is YES to: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
+### 1.1 Proactive Preflight Search (Mandatory Triggers)
+- **Architecture / New Feature**: Before proposing, designing, or scaffolding a new technical pattern, database table, API, state store, or auth flow, execute ` + "`cogni search`" + ` on the domain keyword.
+- **Pre-fix Search**: Before implementing non-trivial bugfixes, search for previous resolutions in that module/error area.
+- Adhere strictly to retrieved architectural patterns and previous decisions.
 
-**MANDATORY TIMING**: For high-signal events, save/update memory **before** sending the final answer to the user.
+### 2. High-Signal Threshold & When to Save (Postflight Gate)
+**GOLDEN RULE**: Call ` + "`cogni save`" + ` (or ` + "`cogni_save`" + `) ONLY if: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
+
+**MANDATORY TIMING**: Execute save/update **before** emitting the final text envelope to the user.
 
 **DO NOT SAVE (Noise / Skip)**:
 - ❌ Trivial metadata tasks (creating/modifying ` + "`LICENSE`" + `, ` + "`.gitignore`" + `, ` + "`.prettierrc`" + `, cosmetic assets).
 - ❌ Typo fixes, code formatting (` + "`fmt`" + `, ` + "`lint`" + `), or minor documentation polishing.
 - ❌ Self-evident information easily discovered by reading the first few lines of a file.
 
-**HIGH-SIGNAL EVENTS (Must Save)**:
-- **Bugfix**: Resolution of a non-trivial error with a non-obvious root cause (` + "`--category bugfix`" + `).
-- **Architecture / Decision**: Choice of libraries, data models, or system structures (` + "`--category architecture`" + ` or ` + "`--category decision`" + `).
-- **Discovery**: Non-obvious technical finding or gotcha about system/codebase behavior (` + "`--category discovery`" + `).
-- **Config**: Non-trivial environment setup, tooling, or script configuration (` + "`--category config`" + `).
-- **Pattern**: Established naming convention, file structure, or technical standard (` + "`--category pattern`" + `).
-- **Preference**: User preference or technical constraint learned during the session (` + "`--category preference`" + `).
+**HIGH-SIGNAL CATEGORIES (Must Save)**:
+- **` + "`bugfix`" + `**: Resolution of a non-trivial error with a non-obvious root cause.
+- **` + "`architecture`" + ` / ` + "`decision`" + `**: Choice of libraries, data schemas, API contracts, or system structures.
+- **` + "`discovery`" + `**: Non-obvious technical finding or gotcha about runtime/codebase behavior.
+- **` + "`config`" + `**: Non-trivial tooling, environment, script, or build setup.
+- **` + "`pattern`" + `**: Established naming convention, folder structure, or coding standard.
+- **` + "`preference`" + `**: User preference or technical constraint learned during the session.
 
-### 3. Synthetic Summary Format (` + "`--summary`" + `)
-To maximize token savings and preserve high information density, every ` + "`--summary`" + ` MUST follow this structured format:
+### 3. Deterministic Topic Keys & Automatic Upserts
+To prevent signature duplication and database fragmentation, use a structured ` + "`--topic-key`" + `:
+- Format: ` + "`<domain>/<subdomain>/<topic>`" + ` (ej. ` + "`arch/auth/jwt`" + `, ` + "`sdd/cart/spec`" + `, ` + "`pattern/react/forms`" + `).
+- When a ` + "`--topic-key`" + ` already exists in the project, ` + "`cogni save`" + ` **automatically updates (upserts)** the record instead of creating duplicates.
+
+### 4. Synthetic Summary Format (` + "`--summary`" + `)
+Every summary MUST follow this high-density 4-part structured format:
 ` + "`What: <One sentence description of what was done> | Why: <Motivation or root cause> | Where: <Key files/paths affected> | Learned: <Gotchas or key learnings (omit if none)>`" + `
 
-### 4. 3-Layer Tag Taxonomy (Mandatory Rule)
-EVERY saved memory signature MUST include 3 to 5 kebab-case tags organized into 3 layers:
-1. **Layer 1 - Main Concept / Domain**: Generic technical domain (e.g., ` + "`pagination`" + `, ` + "`auth`" + `, ` + "`state-management`" + `, ` + "`api-rest`" + `, ` + "`database`" + `).
-2. **Layer 2 - Technology / Tooling**: Exact tech stack involved (e.g., ` + "`go`" + `, ` + "`sqlite`" + `, ` + "`zustand`" + `, ` + "`express`" + `, ` + "`react`" + `, ` + "`css-modules`" + `).
-3. **Layer 3 - Specific Module / Entity**: Project domain module (e.g., ` + "`products-list`" + `, ` + "`users-table`" + `, ` + "`jwt-middleware`" + `).
-
-*Tag Rule*: Always use lowercase, kebab-case, neutral English terms without redundant synonyms. The CLI automatically appends the project tag.
-
-### 5. Topic Update Rules
-- If an existing solution or architecture evolves, **avoid creating duplicate signatures**.
-- Search for the existing observation ID via ` + "`cogni search`" + ` and update it using ` + "`cogni update --id <id> --summary \"<new_summary>\"`" + `.
-
-### 6. Auto-Save & Visual Chat Notification 💾
-When saving or updating a memory signature, always append a 1-line confirmation at the very end of your response:
-` + "`💾 **Memoria Guardada**: [<project_name>] \"<brief_title>\" (Category: #category, Tags: #tag1, #tag2, #tag3)`" + `
-
-If save/update could not be completed, append a 1-line failure disclosure instead:
-` + "`⚠️ **Memoria No Guardada**: <reason> (Attempted: <command>)`" + `
+### 5. 3-Layer Tag Taxonomy
+Include 3 to 5 lowercase, kebab-case tags:
+1. **Layer 1 - Main Concept**: Generic technical domain (` + "`pagination`" + `, ` + "`auth`" + `, ` + "`state-management`" + `, ` + "`database`" + `).
+2. **Layer 2 - Technology / Stack**: Exact tech stack (` + "`go`" + `, ` + "`sqlite`" + `, ` + "`zustand`" + `, ` + "`react`" + `, ` + "`css-modules`" + `).
+3. **Layer 3 - Specific Module**: Project domain entity (` + "`products-list`" + `, ` + "`jwt-middleware`" + `).
 
 ---
 
-## 🛠️ CLI Reference
+## 🛠️ Tooling & CLI Reference
 
-` + "```bash\n# Save structured synthetic memory\ncogni save \\\n  --title \"Fixed N+1 Query in Product List\" \\\n  --category \"bugfix\" \\\n  --tags \"database,sqlite,products-list\" \\\n  --summary \"What: Added index on category_id and joined queries | Why: Resolves slow load on 10k rows | Where: src/db/products.go | Learned: SQLite requires explicit EXPLAIN QUERY PLAN verification\"\n\n# Search memories using FTS5\ncogni search --query \"products\"\n\n# Update existing memory by ID to prevent topic duplication\ncogni update --id 6 --summary \"What: Updated auth to JWT + Rotation | Why: Security audit | Where: src/auth/jwt.go\"\n\n# Remove a memory entry\ncogni remove --id 6\n\n# Share / Export signatures (Markdown / JSON)\ncogni share --format markdown\n\n# Initialize local .cogni database in current project\ncogni init\n\n# Open visual web dashboard in browser\ncogni ui\n```" + `
+### Native MCP Tools (When running in MCP-compatible environments):
+- ` + "`cogni_search(query, project, category, limit)`" + `: Lightweight discovery search (previews).
+- ` + "`cogni_get(id, topic_key, project)`" + `: Full content hydration.
+- ` + "`cogni_save(title, summary, category, tags, topic_key, project, global)`" + `: High-signal save/upsert.
+- ` + "`cogni_update(id, summary, title, category, tags, topic_key)`" + `: Direct update by ID.
+- ` + "`cogni_stats()`" + `: Memory usage and token metrics.
+
+### CLI Commands:
+` + "```bash\n# 1. Save / Upsert structured memory\ncogni save \\\n  --topic-key \"arch/auth/jwt\" \\\n  --title \"JWT Refresh Token Rotation\" \\\n  --category \"architecture\" \\\n  --tags \"auth,jwt,security\" \\\n  --summary \"What: Added refresh token rotation with blacklist | Why: Mitigates token replay | Where: src/auth/jwt.go | Learned: Requires redis TTL sync\"\n\n# 2. Search memories (Compact 1-line preview)\ncogni search --query \"jwt\"\n\n# 3. Retrieve full memory content (Phase 2)\ncogni get arch/auth/jwt\n# or: cogni get --id 6\n\n# 4. Update memory by ID\ncogni update --id 6 --summary \"What: ... | Why: ... | Where: ... | Learned: ...\"\n\n# 5. Start native MCP stdio server\ncogni mcp\n\n# 6. Open visual web dashboard\ncogni ui\n```" + `
 `
 
 // InstallSkill writes the embedded SKILL.md to the specified directory
@@ -124,4 +126,104 @@ func GetHarnessSkillPaths(homeDir string) map[string][]string {
 			filepath.Join(homeDir, ".hermes", "skills"),
 		},
 	}
+}
+
+// GetHarnessMCPPaths returns supported AI harness MCP configuration file paths
+func GetHarnessMCPPaths(homeDir string) map[string][]string {
+	return map[string][]string{
+		"antigravity": {
+			filepath.Join(homeDir, ".gemini", "antigravity-ide", "mcp_config.json"),
+			filepath.Join(homeDir, ".gemini", "config", "mcp_config.json"),
+		},
+		"cursor": {
+			filepath.Join(homeDir, ".cursor", "mcp.json"),
+		},
+		"claude": {
+			filepath.Join(homeDir, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
+			filepath.Join(homeDir, ".config", "Claude", "claude_desktop_config.json"),
+			filepath.Join(homeDir, ".claude.json"),
+		},
+		"opencode": {
+			filepath.Join(homeDir, ".config", "opencode", "mcp.json"),
+		},
+		"hermes": {
+			filepath.Join(homeDir, ".hermes", "mcp.json"),
+		},
+	}
+}
+
+// ConfigureHarnessMCP inyecta automáticamente el servidor MCP 'cogni' en las configuraciones de MCP
+func ConfigureHarnessMCP(homeDir string) map[string]string {
+	mcpConfigs := GetHarnessMCPPaths(homeDir)
+	configured := make(map[string]string)
+
+	cogniBin := "cogni"
+	localBin := filepath.Join(homeDir, ".local", "bin", "cogni")
+	if _, err := os.Stat(localBin); err == nil {
+		cogniBin = localBin
+	}
+
+	cogniEntry := map[string]any{
+		"command": cogniBin,
+		"args":    []string{"mcp"},
+	}
+
+	for harness, paths := range mcpConfigs {
+		for _, cfgPath := range paths {
+			parentDir := filepath.Dir(cfgPath)
+			// Solo configurar si el directorio padre del arnés existe (evita crear carpetas fantasmas)
+			if _, err := os.Stat(parentDir); err != nil {
+				continue
+			}
+
+			if err := injectMCPServer(cfgPath, "cogni", cogniEntry); err == nil {
+				configured[harness] = cfgPath
+				break
+			}
+		}
+	}
+
+	// También configurar en workspace local si .agents/ existe
+	if _, err := os.Stat(".agents"); err == nil {
+		localMCP := filepath.Join(".agents", "mcp_config.json")
+		if err := injectMCPServer(localMCP, "cogni", map[string]any{
+			"command": "cogni",
+			"args":    []string{"mcp"},
+		}); err == nil {
+			configured["workspace"] = localMCP
+		}
+	}
+
+	return configured
+}
+
+func injectMCPServer(filePath string, serverName string, serverConfig map[string]any) error {
+	var root map[string]any
+
+	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
+		_ = json.Unmarshal(data, &root)
+	}
+
+	if root == nil {
+		root = make(map[string]any)
+	}
+
+	var servers map[string]any
+	if existing, ok := root["mcpServers"].(map[string]any); ok && existing != nil {
+		servers = existing
+	} else {
+		servers = make(map[string]any)
+	}
+
+	servers[serverName] = serverConfig
+	root["mcpServers"] = servers
+
+	_ = os.MkdirAll(filepath.Dir(filePath), 0755)
+
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, append(data, '\n'), 0644)
 }

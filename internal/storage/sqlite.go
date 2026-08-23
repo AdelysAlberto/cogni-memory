@@ -83,14 +83,12 @@ func (s *Storage) initSchema() error {
 		project_name TEXT NOT NULL,
 		category TEXT NOT NULL DEFAULT 'general',
 		title TEXT NOT NULL,
+		topic_key TEXT NOT NULL DEFAULT '',
 		summary_signature TEXT NOT NULL,
 		tags TEXT NOT NULL DEFAULT '',
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
-
-	CREATE INDEX IF NOT EXISTS idx_memories_project ON agent_memories(project_name);
-	CREATE INDEX IF NOT EXISTS idx_memories_category ON agent_memories(category);
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -112,15 +110,20 @@ func (s *Storage) initSchema() error {
 		rows.Close()
 	}
 
+	if !cols["topic_key"] {
+		_, _ = s.db.Exec("ALTER TABLE agent_memories ADD COLUMN topic_key TEXT NOT NULL DEFAULT ''")
+	}
 	if !cols["created_at"] {
-		_, err = s.db.Exec("ALTER TABLE agent_memories ADD COLUMN created_at DATETIME DEFAULT ''")
-		if err != nil {
-			// In case error occurs, ignore
-		}
+		_, _ = s.db.Exec("ALTER TABLE agent_memories ADD COLUMN created_at DATETIME DEFAULT ''")
 	}
 	if !cols["updated_at"] {
 		_, _ = s.db.Exec("ALTER TABLE agent_memories ADD COLUMN updated_at DATETIME DEFAULT ''")
 	}
+
+	// Safely create indexes after all columns are guaranteed to exist
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_memories_project ON agent_memories(project_name);")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_memories_category ON agent_memories(category);")
+	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_memories_topic_key ON agent_memories(project_name, topic_key);")
 
 	// Backfill created_at and updated_at
 	_, _ = s.db.Exec(`
@@ -194,13 +197,33 @@ func migrateLegacyDatabase(targetPath string) {
 	_, _ = io.Copy(dst, src)
 }
 
-// SaveMemory creates a new memory record
+// SaveMemory creates a new memory record, or updates existing record if topic_key matches
 func (s *Storage) SaveMemory(m *core.Memory) (*core.Memory, error) {
+	// If topic_key is provided, check for existing record in the same project to perform an upsert
+	if m.TopicKey != "" {
+		existing, err := s.GetMemoryByTopicKey(m.ProjectName, m.TopicKey)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			query := `
+				UPDATE agent_memories 
+				SET title = ?, summary_signature = ?, category = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
+				WHERE id = ?
+			`
+			_, err = s.db.Exec(query, m.Title, m.SummarySignature, m.Category, m.Tags, existing.ID)
+			if err != nil {
+				return nil, fmt.Errorf("error updating memory by topic_key: %w", err)
+			}
+			return s.GetMemoryByID(existing.ID)
+		}
+	}
+
 	query := `
-		INSERT INTO agent_memories (project_name, category, title, summary_signature, tags, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+		INSERT INTO agent_memories (project_name, category, title, topic_key, summary_signature, tags, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 	`
-	res, err := s.db.Exec(query, m.ProjectName, m.Category, m.Title, m.SummarySignature, m.Tags)
+	res, err := s.db.Exec(query, m.ProjectName, m.Category, m.Title, m.TopicKey, m.SummarySignature, m.Tags)
 	if err != nil {
 		return nil, fmt.Errorf("error saving memory: %w", err)
 	}
@@ -215,7 +238,7 @@ func (s *Storage) SaveMemory(m *core.Memory) (*core.Memory, error) {
 }
 
 // UpdateMemory updates fields of an existing memory
-func (s *Storage) UpdateMemory(id int64, title, summary, category, tags string) (*core.Memory, error) {
+func (s *Storage) UpdateMemory(id int64, title, summary, category, tags, topicKey string) (*core.Memory, error) {
 	existing, err := s.GetMemoryByID(id)
 	if err != nil {
 		return nil, err
@@ -236,13 +259,16 @@ func (s *Storage) UpdateMemory(id int64, title, summary, category, tags string) 
 	if tags != "" {
 		existing.Tags = tags
 	}
+	if topicKey != "" {
+		existing.TopicKey = topicKey
+	}
 
 	query := `
 		UPDATE agent_memories 
-		SET title = ?, summary_signature = ?, category = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
+		SET title = ?, topic_key = ?, summary_signature = ?, category = ?, tags = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
 	`
-	_, err = s.db.Exec(query, existing.Title, existing.SummarySignature, existing.Category, existing.Tags, id)
+	_, err = s.db.Exec(query, existing.Title, existing.TopicKey, existing.SummarySignature, existing.Category, existing.Tags, id)
 	if err != nil {
 		return nil, fmt.Errorf("error updating memory: %w", err)
 	}
@@ -266,7 +292,7 @@ func (s *Storage) DeleteMemory(id int64) (bool, error) {
 // GetMemoryByID retrieves a single memory by ID
 func (s *Storage) GetMemoryByID(id int64) (*core.Memory, error) {
 	query := `
-		SELECT id, project_name, category, title, summary_signature, tags, 
+		SELECT id, project_name, category, title, topic_key, summary_signature, tags, 
 		       COALESCE(created_at, CURRENT_TIMESTAMP), 
 		       COALESCE(updated_at, CURRENT_TIMESTAMP)
 		FROM agent_memories
@@ -276,12 +302,45 @@ func (s *Storage) GetMemoryByID(id int64) (*core.Memory, error) {
 
 	var m core.Memory
 	var createdAtStr, updatedAtStr string
-	err := row.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.SummarySignature, &m.Tags, &createdAtStr, &updatedAtStr)
+	err := row.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &createdAtStr, &updatedAtStr)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("error reading memory: %w", err)
+	}
+
+	m.CreatedAt = parseTime(createdAtStr)
+	m.UpdatedAt = parseTime(updatedAtStr)
+	m.Source = s.source
+	return &m, nil
+}
+
+// GetMemoryByTopicKey retrieves a single memory by project_name and topic_key
+func (s *Storage) GetMemoryByTopicKey(projectName, topicKey string) (*core.Memory, error) {
+	if topicKey == "" {
+		return nil, nil
+	}
+	query := `
+		SELECT id, project_name, category, title, topic_key, summary_signature, tags, 
+		       COALESCE(created_at, CURRENT_TIMESTAMP), 
+		       COALESCE(updated_at, CURRENT_TIMESTAMP)
+		FROM agent_memories
+		WHERE (? = '' OR project_name = ? OR project_name = 'global')
+		  AND topic_key = ?
+		ORDER BY CASE WHEN project_name = ? THEN 0 ELSE 1 END, updated_at DESC
+		LIMIT 1
+	`
+	row := s.db.QueryRow(query, projectName, projectName, topicKey, projectName)
+
+	var m core.Memory
+	var createdAtStr, updatedAtStr string
+	err := row.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &createdAtStr, &updatedAtStr)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error reading memory by topic_key: %w", err)
 	}
 
 	m.CreatedAt = parseTime(createdAtStr)
@@ -299,7 +358,7 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 	// 1. Try FTS5 match first if available
 	var memories []core.Memory
 	ftsQuery := `
-		SELECT m.id, m.project_name, m.category, m.title, m.summary_signature, m.tags,
+		SELECT m.id, m.project_name, m.category, m.title, m.topic_key, m.summary_signature, m.tags,
 		       COALESCE(m.created_at, CURRENT_TIMESTAMP), COALESCE(m.updated_at, CURRENT_TIMESTAMP)
 		FROM memories_fts f
 		JOIN agent_memories m ON f.rowid = m.id
@@ -318,7 +377,7 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 			for rows.Next() {
 				var m core.Memory
 				var cStr, uStr string
-				if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.SummarySignature, &m.Tags, &cStr, &uStr); err == nil {
+				if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err == nil {
 					m.CreatedAt = parseTime(cStr)
 					m.UpdatedAt = parseTime(uStr)
 					m.Source = s.source
@@ -333,17 +392,17 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 
 	// 2. Fallback to LIKE query
 	likeQuery := `
-		SELECT id, project_name, category, title, summary_signature, tags,
+		SELECT id, project_name, category, title, topic_key, summary_signature, tags,
 		       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
 		FROM agent_memories
 		WHERE (? = '' OR project_name = ? OR project_name = 'global')
 		  AND (? = '' OR category = ?)
-		  AND (title LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)
+		  AND (title LIKE ? OR topic_key LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)
 		ORDER BY created_at DESC
 		LIMIT ?
 	`
 	pattern := "%" + query + "%"
-	rows, err := s.db.Query(likeQuery, projectName, projectName, category, category, pattern, pattern, pattern, limit)
+	rows, err := s.db.Query(likeQuery, projectName, projectName, category, category, pattern, pattern, pattern, pattern, limit)
 	if err != nil {
 		return nil, fmt.Errorf("search error: %w", err)
 	}
@@ -352,7 +411,7 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 	for rows.Next() {
 		var m core.Memory
 		var cStr, uStr string
-		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
+		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = parseTime(cStr)
@@ -371,7 +430,7 @@ func (s *Storage) ListMemories(projectName, category string, limit, offset int) 
 	}
 
 	sqlQuery := `
-		SELECT id, project_name, category, title, summary_signature, tags,
+		SELECT id, project_name, category, title, topic_key, summary_signature, tags,
 		       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
 		FROM agent_memories
 		WHERE (? = '' OR project_name = ? OR project_name = 'global')
@@ -389,7 +448,7 @@ func (s *Storage) ListMemories(projectName, category string, limit, offset int) 
 	for rows.Next() {
 		var m core.Memory
 		var cStr, uStr string
-		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
+		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
 			return nil, err
 		}
 		m.CreatedAt = parseTime(cStr)
@@ -419,6 +478,7 @@ func PromoteMemory(src *Storage, dst *Storage, id int64) (*core.Memory, error) {
 		ProjectName:      mem.ProjectName,
 		Category:         mem.Category,
 		Title:            mem.Title,
+		TopicKey:         mem.TopicKey,
 		SummarySignature: mem.SummarySignature,
 		Tags:             mem.Tags,
 	}

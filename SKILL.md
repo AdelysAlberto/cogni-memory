@@ -15,90 +15,94 @@ Its primary objective is to maintain architectural consistency across chat sessi
 
 ## ⚡ Autonomous Agent Operating Directives
 
-### 1. Auto-Retrieval / When to Search (Reactive & Proactive Search)
-- **Reactive Search**: Execute `cogni search --query "<keywords>"` immediately when the user asks to recall past work (e.g., "remember", "recall", "what did we do", "how did we solve").
-- **Proactive Search**: Before proposing or designing any new technical pattern, component, or architecture (e.g., pagination, auth, tables, state management, middleware):
+### 1. Two-Step Retrieval Protocol (Token Optimization)
+To prevent context inflation, retrieval ALWAYS follows two distinct phases:
+
+- **Step 1: Lightweight Search (Discovery)**
+  Run a compact search to inspect matching titles, categories, tags, and 1-line previews:
   ```bash
-  cogni search --query "<concept_or_topic>"
+  cogni search --query "<keywords>"
+  # Or via MCP Tool: cogni_search(query: "...")
   ```
-- **Pre-fix Search (Mandatory for non-trivial bugfixes)**: Before implementing a non-trivial bugfix, execute at least one targeted search for the failing area (error, module, or stack trace keyword).
-- If a relevant previous signature exists, **adopt and adhere to the same technical pattern**, conventions, and previously approved architectural decisions.
-- **MANDATORY CHAT NOTIFICATION ON RETRIEVAL**: When retrieved memories influence your response, append a 1-line confirmation:
-  `🧠 **Memoria Recuperada**: [<project_name>] "<retrieved_title_or_topic>" (Tags: #tag1, #tag2)`
+- **Step 2: Full Content Hydration (Only for relevant IDs/Keys)**
+  Retrieve the complete synthetic signature only for the chosen ID or TopicKey:
+  ```bash
+  cogni get <id_or_topic_key>
+  # Or via MCP Tool: cogni_get(id: 6) / cogni_get(topic_key: "arch/auth/jwt")
+  ```
 
-### 1.1 Copilot/Agent Enforcement (No Silent Substitution)
-- If `cogni` CLI is available, **do not substitute** Cogni operations with internal agent memory systems (`memory.create`, hidden notes, scratchpad-only memory).
-- Internal memory can be used only as a temporary buffer, never as the final persistence layer for high-signal events.
-- If CLI is unavailable or fails, explicitly disclose fallback in chat with the reason and exact failed command.
+### 1.1 Proactive Preflight Search (Mandatory Triggers)
+- **Architecture / New Feature**: Before proposing, designing, or scaffolding a new technical pattern, database table, API, state store, or auth flow, execute `cogni search` on the domain keyword.
+- **Pre-fix Search**: Before implementing non-trivial bugfixes, search for previous resolutions in that module/error area.
+- Adhere strictly to retrieved architectural patterns and previous decisions.
 
-### 2. When to Save & High-Signal Threshold (Mandatory Triggers)
-**GOLDEN RULE**: Call `cogni save` ONLY if the answer is YES to: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
+### 2. High-Signal Threshold & When to Save (Postflight Gate)
+**GOLDEN RULE**: Call `cogni save` (or `cogni_save`) ONLY if: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
 
-**MANDATORY TIMING**: For high-signal events, save/update memory **before** sending the final answer to the user.
+**MANDATORY TIMING**: Execute save/update **before** emitting the final text envelope to the user.
 
 **DO NOT SAVE (Noise / Skip)**:
 - ❌ Trivial metadata tasks (creating/modifying `LICENSE`, `.gitignore`, `.prettierrc`, cosmetic assets).
 - ❌ Typo fixes, code formatting (`fmt`, `lint`), or minor documentation polishing.
 - ❌ Self-evident information easily discovered by reading the first few lines of a file.
 
-**HIGH-SIGNAL EVENTS (Must Save)**:
-- **Bugfix**: Resolution of a non-trivial error with a non-obvious root cause (`--category bugfix`).
-- **Architecture / Decision**: Choice of libraries, data models, or system structures (`--category architecture` or `--category decision`).
-- **Discovery**: Non-obvious technical finding or gotcha about system/codebase behavior (`--category discovery`).
-- **Config**: Non-trivial environment setup, tooling, or script configuration (`--category config`).
-- **Pattern**: Established naming convention, file structure, or technical standard (`--category pattern`).
-- **Preference**: User preference or technical constraint learned during the session (`--category preference`).
+**HIGH-SIGNAL CATEGORIES (Must Save)**:
+- **`bugfix`**: Resolution of a non-trivial error with a non-obvious root cause.
+- **`architecture` / `decision`**: Choice of libraries, data schemas, API contracts, or system structures.
+- **`discovery`**: Non-obvious technical finding or gotcha about runtime/codebase behavior.
+- **`config`**: Non-trivial tooling, environment, script, or build setup.
+- **`pattern`**: Established naming convention, folder structure, or coding standard.
+- **`preference`**: User preference or technical constraint learned during the session.
 
-### 3. Synthetic Summary Format (`--summary`)
-To maximize token savings and preserve high information density, every `--summary` MUST follow this structured format:
+### 3. Deterministic Topic Keys & Automatic Upserts
+To prevent signature duplication and database fragmentation, use a structured `--topic-key`:
+- Format: `<domain>/<subdomain>/<topic>` (ej. `arch/auth/jwt`, `sdd/cart/spec`, `pattern/react/forms`).
+- When a `--topic-key` already exists in the project, `cogni save` **automatically updates (upserts)** the record instead of creating duplicates.
+
+### 4. Synthetic Summary Format (`--summary`)
+Every summary MUST follow this high-density 4-part structured format:
 `What: <One sentence description of what was done> | Why: <Motivation or root cause> | Where: <Key files/paths affected> | Learned: <Gotchas or key learnings (omit if none)>`
 
-### 4. 3-Layer Tag Taxonomy (Mandatory Rule)
-EVERY saved memory signature MUST include 3 to 5 kebab-case tags organized into 3 layers:
-1. **Layer 1 - Main Concept / Domain**: Generic technical domain (e.g., `pagination`, `auth`, `state-management`, `api-rest`, `database`).
-2. **Layer 2 - Technology / Tooling**: Exact tech stack involved (e.g., `go`, `sqlite`, `zustand`, `express`, `react`, `css-modules`).
-3. **Layer 3 - Specific Module / Entity**: Project domain module (e.g., `products-list`, `users-table`, `jwt-middleware`).
-
-*Tag Rule*: Always use lowercase, kebab-case, neutral English terms without redundant synonyms. The CLI automatically appends the project tag.
-
-### 5. Topic Update Rules
-- If an existing solution or architecture evolves, **avoid creating duplicate signatures**.
-- Search for the existing observation ID via `cogni search` and update it using `cogni update --id <id> --summary "<new_summary>"`.
-
-### 6. Auto-Save & Visual Chat Notification 💾
-When saving or updating a memory signature, always append a 1-line confirmation at the very end of your response:
-`💾 **Memoria Guardada**: [<project_name>] "<brief_title>" (Category: #category, Tags: #tag1, #tag2, #tag3)`
-
-If save/update could not be completed, append a 1-line failure disclosure instead:
-`⚠️ **Memoria No Guardada**: <reason> (Attempted: <command>)`
+### 5. 3-Layer Tag Taxonomy
+Include 3 to 5 lowercase, kebab-case tags:
+1. **Layer 1 - Main Concept**: Generic technical domain (`pagination`, `auth`, `state-management`, `database`).
+2. **Layer 2 - Technology / Stack**: Exact tech stack (`go`, `sqlite`, `zustand`, `react`, `css-modules`).
+3. **Layer 3 - Specific Module**: Project domain entity (`products-list`, `jwt-middleware`).
 
 ---
 
-## 🛠️ CLI Reference
+## 🛠️ Tooling & CLI Reference
 
+### Native MCP Tools (When running in MCP-compatible environments):
+- `cogni_search(query, project, category, limit)`: Lightweight discovery search (previews).
+- `cogni_get(id, topic_key, project)`: Full content hydration.
+- `cogni_save(title, summary, category, tags, topic_key, project, global)`: High-signal save/upsert.
+- `cogni_update(id, summary, title, category, tags, topic_key)`: Direct update by ID.
+- `cogni_stats()`: Memory usage and token metrics.
+
+### CLI Commands:
 ```bash
-# Save structured synthetic memory
+# 1. Save / Upsert structured memory
 cogni save \
-  --title "Fixed N+1 Query in Product List" \
-  --category "bugfix" \
-  --tags "database,sqlite,products-list" \
-  --summary "What: Added index on category_id and joined queries | Why: Resolves slow load on 10k rows | Where: src/db/products.go | Learned: SQLite requires explicit EXPLAIN QUERY PLAN verification"
+  --topic-key "arch/auth/jwt" \
+  --title "JWT Refresh Token Rotation" \
+  --category "architecture" \
+  --tags "auth,jwt,security" \
+  --summary "What: Added refresh token rotation with blacklist | Why: Mitigates token replay | Where: src/auth/jwt.go | Learned: Requires redis TTL sync"
 
-# Search memories using FTS5
-cogni search --query "products"
+# 2. Search memories (Compact 1-line preview)
+cogni search --query "jwt"
 
-# Update existing memory by ID to prevent topic duplication
-cogni update --id 6 --summary "What: Updated auth to JWT + Rotation | Why: Security audit | Where: src/auth/jwt.go"
+# 3. Retrieve full memory content (Phase 2)
+cogni get arch/auth/jwt
+# or: cogni get --id 6
 
-# Remove a memory entry
-cogni remove --id 6
+# 4. Update memory by ID
+cogni update --id 6 --summary "What: ... | Why: ... | Where: ... | Learned: ..."
 
-# Share / Export signatures (Markdown / JSON)
-cogni share --format markdown
+# 5. Start native MCP stdio server
+cogni mcp
 
-# Initialize local .cogni database in current project
-cogni init
-
-# Open visual web dashboard in browser
+# 6. Open visual web dashboard
 cogni ui
 ```

@@ -436,6 +436,7 @@ func (s *Server) handleMemoryByID(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPut:
 		var body struct {
 			Title            string `json:"title"`
+			TopicKey         string `json:"topic_key"`
 			SummarySignature string `json:"summary_signature"`
 			Category         string `json:"category"`
 			Tags             string `json:"tags"`
@@ -445,7 +446,7 @@ func (s *Server) handleMemoryByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		updated, err := targetStorage.UpdateMemory(id, body.Title, body.SummarySignature, body.Category, body.Tags)
+		updated, err := targetStorage.UpdateMemory(id, body.Title, body.SummarySignature, body.Category, body.Tags, body.TopicKey)
 		if err != nil {
 			sendJSON(w, map[string]string{"error": err.Error()}, http.StatusInternalServerError)
 			return

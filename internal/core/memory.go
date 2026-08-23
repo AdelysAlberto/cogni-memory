@@ -8,6 +8,7 @@ type Memory struct {
 	ProjectName      string    `json:"project_name"`
 	Category         string    `json:"category"`
 	Title            string    `json:"title"`
+	TopicKey         string    `json:"topic_key,omitempty"`
 	SummarySignature string    `json:"summary_signature"`
 	Tags             string    `json:"tags"`
 	Source           string    `json:"source,omitempty"` // "local" or "global"

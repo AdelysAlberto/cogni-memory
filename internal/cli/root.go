@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AdelysAlberto/cogni/internal/core"
+	"github.com/AdelysAlberto/cogni/internal/mcp"
 	"github.com/AdelysAlberto/cogni/internal/server"
 	"github.com/AdelysAlberto/cogni/internal/storage"
 )
@@ -36,6 +37,15 @@ func Execute(args []string) int {
 		return handleSave(cmdArgs)
 	case "search":
 		return handleSearch(cmdArgs)
+	case "get":
+		return handleGet(cmdArgs)
+	case "mcp":
+		server := mcp.NewServer(Version)
+		if err := server.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error ejecutando servidor MCP: %v\n", err)
+			return 1
+		}
+		return 0
 	case "update":
 		// If called without memory flags or with --check, route to upgrade
 		if len(cmdArgs) == 0 || (len(cmdArgs) == 1 && (cmdArgs[0] == "--check" || cmdArgs[0] == "-c")) {
@@ -83,8 +93,10 @@ Uso:
 
 Comandos Principales:
   init        Inicializa Cogni globalmente (~/.cogni/) e instala skills de IA
-  save        Guarda una firma de memoria sintética
-  search      Busca firmas de memoria con FTS5 (local y global federado)
+  save        Guarda o actualiza (upsert) una firma de memoria sintética
+  search      Busca firmas de memoria con FTS5 (previews compactas para ahorrar tokens)
+  get         Recupera una memoria completa por ID o por TopicKey determinístico
+  mcp         Inicia el servidor nativo MCP (Model Context Protocol) por stdio
   update      Actualiza una memoria existente por su ID
   promote     Promueve una memoria de local a global (o viceversa)
   remove      Elimina una memoria por su ID
@@ -107,15 +119,12 @@ Flags Globales:
 
 Ejemplos:
   cogni init                   # Instala cogni global + configura skills de IA
-  cogni init --all             # Instala cogni global + skills en todos los arneses
-  cogni init --no-skills       # Instala cogni global sin configurar skills
-  cogni init --project         # Inicializa memoria local del proyecto actual
-  cogni save --title "Auth JWT" --summary "Firma sintética..." --category auth --tags "jwt,tokens"
-  cogni search --query "jwt"
-  cogni update --id 6 --summary "Nueva firma..."
-  cogni remove --id 6
-  cogni share --format markdown > memories.md
-  cogni ui
+  cogni save --topic-key "arch/auth/jwt" --title "Auth JWT" --summary "What: ... | Why: ... | Where: ... | Learned: ..." --category architecture --tags "auth,jwt"
+  cogni search --query "jwt"   # Búsqueda compacta (IDs y previews)
+  cogni get --id 6             # Recuperación completa por ID
+  cogni get arch/auth/jwt      # Recuperación completa por TopicKey
+  cogni mcp                    # Inicia servidor MCP para agentes
+  cogni ui                     # Abre dashboard web
 `
 	fmt.Print(usage)
 }
@@ -263,12 +272,22 @@ func promptAndInstallSkills(autoAll bool) {
 	}
 
 	fmt.Println("✨ Skills de Cogni configuradas y listas para usar con tus Agentes de IA.")
+
+	// Configurar servidores MCP automáticamente en todos los arneses detectados
+	mcpResults := core.ConfigureHarnessMCP(home)
+	if len(mcpResults) > 0 {
+		fmt.Println("🔌 Servidores MCP configurados automáticamente:")
+		for harness, cfgPath := range mcpResults {
+			fmt.Printf("  -> [%s] Servidor MCP registrado en: %s\n", harness, cfgPath)
+		}
+	}
 }
 
 func handleSave(args []string) int {
 	fs := flag.NewFlagSet("save", flag.ExitOnError)
 	project := fs.String("project", "", "Nombre del proyecto")
 	title := fs.String("title", "", "Título o hito de la memoria")
+	topicKey := fs.String("topic-key", "", "Clave temática determinística para posibilitar upserts (ej: 'sdd/auth/spec')")
 	summary := fs.String("summary", "", "Resumen sintético de la memoria")
 	category := fs.String("category", "general", "Categoría")
 	tags := fs.String("tags", "", "Tags separados por coma")
@@ -312,6 +331,7 @@ func handleSave(args []string) int {
 		ProjectName:      projectName,
 		Category:         *category,
 		Title:            *title,
+		TopicKey:         *topicKey,
 		SummarySignature: *summary,
 		Tags:             formattedTags,
 	}
@@ -329,6 +349,9 @@ func handleSave(args []string) int {
 		fmt.Printf("ID: #%d\n", saved.ID)
 		fmt.Printf("Proyecto: [%s]\n", saved.ProjectName)
 		fmt.Printf("Título: %s\n", saved.Title)
+		if saved.TopicKey != "" {
+			fmt.Printf("Topic Key: %s\n", saved.TopicKey)
+		}
 		fmt.Printf("Categoría: %s\n", saved.Category)
 		fmt.Printf("Tags: %s\n", saved.Tags)
 		fmt.Printf("Ubicación BD: %s\n", s.DBPath())
@@ -359,6 +382,7 @@ func handleSearch(args []string) int {
 	project := fs.String("project", "", "Filtrar por proyecto")
 	category := fs.String("category", "", "Filtrar por categoría")
 	limit := fs.Int("limit", 10, "Límite de resultados")
+	full := fs.Bool("full", false, "Mostrar la firma sintética completa en vez de preview compacto")
 	globalOnly := fs.Bool("global", false, "Buscar solo en la base de datos global")
 	localOnly := fs.Bool("local", false, "Buscar solo en la base de datos local")
 	dbPath := fs.String("db", "", "Ruta a la base de datos")
@@ -427,16 +451,136 @@ func handleSearch(args []string) int {
 		return 0
 	}
 
-	fmt.Printf("🔍 Se encontraron %d memoria(s):\n\n", len(results))
+	fmt.Printf("🔍 Se encontraron %d memoria(s) [Usa 'cogni get <id|topic-key>' para ver el contenido completo]:\n\n", len(results))
 	for _, m := range results {
 		srcBadge := "LOCAL"
 		if m.Source == "global" {
 			srcBadge = "GLOBAL"
 		}
-		fmt.Printf("━━━ [%s #%d] [%s] %s ━━━\n", srcBadge, m.ID, m.ProjectName, m.Title)
-		fmt.Printf("🏷️ Tags: %s | 📂 Categoría: %s\n", m.Tags, m.Category)
-		fmt.Printf("📝 %s\n\n", m.SummarySignature)
+		topicStr := ""
+		if m.TopicKey != "" {
+			topicStr = fmt.Sprintf(" (Key: %s)", m.TopicKey)
+		}
+
+		if *full {
+			fmt.Printf("━━━ [%s #%d] [%s] %s%s ━━━\n", srcBadge, m.ID, m.ProjectName, m.Title, topicStr)
+			fmt.Printf("🏷️ Tags: %s | 📂 Categoría: %s\n", m.Tags, m.Category)
+			fmt.Printf("📝 %s\n\n", m.SummarySignature)
+		} else {
+			preview := m.SummarySignature
+			if idx := strings.Index(preview, "|"); idx != -1 {
+				preview = strings.TrimSpace(preview[:idx])
+			} else if len(preview) > 100 {
+				preview = preview[:97] + "..."
+			}
+			fmt.Printf("• [#%d %s] [%s] %s%s\n", m.ID, srcBadge, m.Category, m.Title, topicStr)
+			fmt.Printf("  Tags: %s | %s\n\n", m.Tags, preview)
+		}
 	}
+
+	return 0
+}
+
+func handleGet(args []string) int {
+	fs := flag.NewFlagSet("get", flag.ExitOnError)
+	id := fs.Int64("id", 0, "ID de la memoria")
+	topicKey := fs.String("topic-key", "", "TopicKey determinístico")
+	project := fs.String("project", "", "Filtrar por proyecto")
+	globalOnly := fs.Bool("global", false, "Buscar solo en BD global")
+	localOnly := fs.Bool("local", false, "Buscar solo en BD local")
+	dbPath := fs.String("db", "", "Ruta a BD")
+	asJSON := fs.Bool("json", false, "Salida en JSON")
+
+	_ = fs.Parse(args)
+
+	// Check positional argument if neither --id nor --topic-key is provided
+	if *id <= 0 && *topicKey == "" && len(fs.Args()) > 0 {
+		posArg := fs.Args()[0]
+		if parsedID, err := strconv.ParseInt(posArg, 10, 64); err == nil && parsedID > 0 {
+			*id = parsedID
+		} else {
+			*topicKey = posArg
+		}
+	}
+
+	if *id <= 0 && *topicKey == "" {
+		fmt.Fprintln(os.Stderr, "Error: Especifica un ID o TopicKey (ej. 'cogni get 6' o 'cogni get arch/auth/jwt').")
+		return 1
+	}
+
+	projectName := *project
+	if projectName == "" && !*globalOnly {
+		projectName = core.DetectProjectName()
+	}
+
+	localStorage, globalStorage := getStorages()
+	if localStorage != nil {
+		defer localStorage.Close()
+	}
+	if globalStorage != nil {
+		defer globalStorage.Close()
+	}
+
+	var mem *core.Memory
+	var err error
+
+	if *dbPath != "" {
+		s, err := storage.New(*dbPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error conectando a BD: %v\n", err)
+			return 1
+		}
+		defer s.Close()
+		if *id > 0 {
+			mem, err = s.GetMemoryByID(*id)
+		} else {
+			mem, err = s.GetMemoryByTopicKey(projectName, *topicKey)
+		}
+	} else {
+		if *id > 0 {
+			if !*globalOnly && localStorage != nil {
+				mem, err = localStorage.GetMemoryByID(*id)
+			}
+			if mem == nil && !*localOnly && globalStorage != nil {
+				mem, err = globalStorage.GetMemoryByID(*id)
+			}
+		} else {
+			if !*globalOnly && localStorage != nil {
+				mem, err = localStorage.GetMemoryByTopicKey(projectName, *topicKey)
+			}
+			if mem == nil && !*localOnly && globalStorage != nil {
+				mem, err = globalStorage.GetMemoryByTopicKey(projectName, *topicKey)
+			}
+		}
+	}
+
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error recuperando memoria: %v\n", err)
+		return 1
+	}
+
+	if mem == nil {
+		fmt.Println("❌ Memoria no encontrada.")
+		return 1
+	}
+
+	if *asJSON {
+		_ = json.NewEncoder(os.Stdout).Encode(mem)
+		return 0
+	}
+
+	srcBadge := "LOCAL"
+	if mem.Source == "global" {
+		srcBadge = "GLOBAL"
+	}
+
+	fmt.Printf("━━━ [%s #%d] [%s] %s ━━━\n", srcBadge, mem.ID, mem.ProjectName, mem.Title)
+	if mem.TopicKey != "" {
+		fmt.Printf("🔑 Topic Key: %s\n", mem.TopicKey)
+	}
+	fmt.Printf("📂 Categoría: %s | 🏷️ Tags: %s\n", mem.Category, mem.Tags)
+	fmt.Printf("📅 Actualizado: %s\n\n", mem.UpdatedAt.Format("2006-01-02 15:04:05"))
+	fmt.Printf("📝 %s\n", mem.SummarySignature)
 
 	return 0
 }
@@ -496,6 +640,7 @@ func handleUpdate(args []string) int {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
 	id := fs.Int64("id", 0, "ID de la memoria a actualizar")
 	title := fs.String("title", "", "Nuevo título")
+	topicKey := fs.String("topic-key", "", "Nuevo TopicKey determinístico")
 	summary := fs.String("summary", "", "Nuevo resumen")
 	category := fs.String("category", "", "Nueva categoría")
 	tags := fs.String("tags", "", "Nuevos tags")
@@ -517,7 +662,7 @@ func handleUpdate(args []string) int {
 	}
 	defer s.Close()
 
-	updated, err := s.UpdateMemory(*id, *title, *summary, *category, *tags)
+	updated, err := s.UpdateMemory(*id, *title, *summary, *category, *tags, *topicKey)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error actualizando memoria: %v\n", err)
 		return 1

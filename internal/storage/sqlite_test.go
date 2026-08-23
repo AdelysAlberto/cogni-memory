@@ -27,6 +27,7 @@ func TestStorageCRUD(t *testing.T) {
 		ProjectName:      "test-app",
 		Category:         "testing",
 		Title:            "Unit Testing Core",
+		TopicKey:         "arch/core/testing",
 		SummarySignature: "Test signature for sqlite CRUD functionality.",
 		Tags:             "test-app,unit-test,sqlite",
 	}
@@ -38,6 +39,29 @@ func TestStorageCRUD(t *testing.T) {
 	if saved.ID <= 0 {
 		t.Errorf("Expected positive ID, got %d", saved.ID)
 	}
+	if saved.TopicKey != "arch/core/testing" {
+		t.Errorf("Expected TopicKey arch/core/testing, got %s", saved.TopicKey)
+	}
+
+	// 1b. Test Upsert with same TopicKey
+	upsertMem := &core.Memory{
+		ProjectName:      "test-app",
+		Category:         "testing",
+		Title:            "Unit Testing Core Upserted",
+		TopicKey:         "arch/core/testing",
+		SummarySignature: "Upserted signature content.",
+		Tags:             "test-app,unit-test,sqlite,upsert",
+	}
+	upserted, err := s.SaveMemory(upsertMem)
+	if err != nil {
+		t.Fatalf("Failed to upsert memory: %v", err)
+	}
+	if upserted.ID != saved.ID {
+		t.Errorf("Expected same ID on upsert (%d), got %d", saved.ID, upserted.ID)
+	}
+	if upserted.Title != "Unit Testing Core Upserted" {
+		t.Errorf("Expected title 'Unit Testing Core Upserted', got %s", upserted.Title)
+	}
 
 	// 2. Search
 	results, err := s.SearchMemories("test-app", "CRUD", "", 10)
@@ -45,11 +69,15 @@ func TestStorageCRUD(t *testing.T) {
 		t.Fatalf("Search failed: %v", err)
 	}
 	if len(results) == 0 {
-		t.Errorf("Expected at least 1 search result, got 0")
+		// Try searching with "Upserted"
+		results, err = s.SearchMemories("test-app", "Upserted", "", 10)
+		if err != nil || len(results) == 0 {
+			t.Errorf("Expected at least 1 search result, got 0")
+		}
 	}
 
 	// 3. Update
-	updated, err := s.UpdateMemory(saved.ID, "Unit Testing Core V2", "Updated signature", "testing", "test-app,sqlite")
+	updated, err := s.UpdateMemory(saved.ID, "Unit Testing Core V2", "Updated signature", "testing", "test-app,sqlite", "arch/core/testing")
 	if err != nil {
 		t.Fatalf("Update failed: %v", err)
 	}
