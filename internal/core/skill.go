@@ -254,8 +254,7 @@ func ConfigureHarnessMCP(homeDir string, allowedHarnesses []string) map[string]s
 			}
 
 			if err := injectMCPServer(cfgPath, "cogni", cogniEntry); err == nil {
-				configured[harness] = cfgPath
-				break
+				configured[harness+" ("+filepath.Base(parentDir)+")"] = cfgPath
 			}
 		}
 	}
