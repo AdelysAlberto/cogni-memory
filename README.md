@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Cognitive Omniscient Grid for Networked Intelligence</b><br>
-  <i>Sistema de Memoria Autónoma de Alta Densidad & Reducción de Tokens para Agentes de IA.</i>
+  <i>Memoria persistente y buscable para agentes de IA en entornos de desarrollo.</i>
 </p>
 
 <p align="center">
@@ -18,39 +18,46 @@
 
 ---
 
-<blockquote align="center">
-  <h4>⚡ <i>"Así como el Byte es la unidad de datos, Cogni es la unidad de conocimiento sintético de tu agente."</i></h4>
-</blockquote>
-
----
-
 ## 📌 Visión General
 
-**Cogni** es el estándar de memoria persistente ultrarrápida y de alta densidad para agentes de Inteligencia Artificial. Almacena **firmas semánticas sintéticas** estructuradas en SQLite local o centralizado, reduciendo hasta un **95% la lectura repetitiva de archivos y el consumo de tokens de contexto** entre sesiones de desarrollo.
+**Cogni** es una CLI para que un agente guarde y recupere decisiones técnicas de forma persistente entre sesiones.
 
-Es compatible de forma nativa con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **OpenCode**, **Hermes CLI** y cualquier arnés de agente basado en CLI o IDE.
+En lugar de releer contexto crudo en cada tarea, el agente consulta una memoria sintética en SQLite (local por proyecto y opcionalmente global). El objetivo práctico es reducir repetición, mantener continuidad y evitar perder acuerdos técnicos.
+
+Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **OpenCode**, **Hermes CLI** y cualquier flujo basado en CLI/IDE que pueda ejecutar comandos.
 
 ---
 
-## 🚀 Comparativa: Contexto Crudo vs. Memoria Sintética Cogni
+## ✅ Qué Resuelve
+
+* Evita repetir descubrimientos técnicos ya resueltos en sesiones anteriores.
+* Reduce lecturas largas de archivos cuando la pregunta ya tiene antecedente.
+* Da trazabilidad mínima de decisiones con estructura `What | Why | Where | Learned`.
+* Permite operar en modo local-first, sin depender de servicios externos.
+
+---
+
+## 🚀 Contexto Crudo vs. Memoria Sintética
+
+> Nota: los valores son rangos orientativos observados en uso real y dependen del proyecto, del modelo y del arnés.
 
 | Métricas / Capacidad | Sin Cogni (Lectura Tradicional) | Con Cogni (Firmas Sintéticas) |
 | :--- | :--- | :--- |
-| **Consumo de Tokens** | 10,000 – 50,000 tokens por sesión | **150 – 300 tokens** (Ahorro de hasta 95%) |
-| **Tiempo de Recuperación** | 3 - 10 segundos (Re-lectura de código) | **< 5 ms** (Búsqueda FTS5 en SQLite) |
+| **Consumo de Tokens** | Miles de tokens por relectura | Menor consumo al reutilizar resumen estructurado |
+| **Tiempo de Recuperación** | Segundos de relectura | Milisegundos a decenas de ms según tamaño de BD |
 | **Coherencia de Arquitectura** | Se pierde al compactar o reiniciar chat | **Persistente** entre sesiones y proyectos |
-| **Duplicación de Decisiones** | Alta (el agente olvida patrones aprobados) | **Cero** (Actualización dinámica de tópicos) |
+| **Duplicación de Decisiones** | Frecuente | Menor, si se guarda y actualiza de forma disciplinada |
 
 ---
 
 ## ⚡ Características Principales
 
-* 🚀 **Binario Nativo en Go (Pure-Go Core)**: Cero dependencias externas (no requiere Node.js ni Python). Arranca en menos de 5 ms con binario estático compilado.
-* 🗄️ **Local-First & Global L2**: Soporta base de datos aislada por proyecto (`.cogni/memory.db`) y almacenamiento global federado (`~/.cogni/memory.db`).
-* 🔍 **Motor de Búsqueda FTS5**: Indexación Full-Text Search ultrarrápida sobre títulos, categorías, etiquetas y aprendizaje sintético.
-* 🖥️ **Web UI Embebida**: Dashboard visual interactivo compilado directamente dentro del binario con auto-detección de puerto libre.
-* 🏷️ **Taxonomía de Tags en 3 Capas**: Clasificación determinista de conocimiento para evitar ambigüedad y duplicación.
-* 🤖 **Protocolo de Disparo Autónomo**: Basado en eventos (*Bugfix*, *Decisiones*, *Descubrimientos*, *Configuración*, *Patrones*, *Preferencias*).
+* 🚀 **Binario Nativo en Go**: sin runtime de Node o Python para ejecutar la CLI.
+* 🗄️ **Local-First**: memoria por proyecto en `.cogni/memory.db` y capa global opcional en `~/.cogni/memory.db`.
+* 🔍 **Búsqueda FTS5**: búsqueda full-text por título, categoría, tags y resumen.
+* 🖥️ **UI Embebida**: inspección visual de memorias desde `cogni ui`.
+* 🏷️ **Taxonomía de Tags**: reduce ambigüedad y facilita recuperación consistente.
+* 🤖 **Convención Operativa**: define cuándo buscar y cuándo guardar para evitar olvidos del agente.
 
 ---
 
@@ -75,6 +82,43 @@ make install
 ```
 
 *El binario quedará listo en `$HOME/.local/bin/cogni`.*
+
+---
+
+## 🔐 Por Qué Instalar el Binario (Para Escépticos y Seguridad)
+
+Instalar el binario no es solo comodidad; también es control operativo:
+
+1. **Superficie de ejecución acotada**: ejecutas una CLI única en Go, en vez de depender de varios runtimes y paquetes transitorios.
+2. **Comportamiento estable**: el mismo comando `cogni` funciona igual desde distintos agentes (Copilot, Cursor, CLI), reduciendo variaciones.
+3. **Local-first real**: por defecto, la memoria vive en tu máquina (SQLite), sin enviar datos a servicios remotos por diseño de base.
+4. **Auditable**: el código fuente está disponible; puedes compilar tú mismo y evitar binarios precompilados si lo prefieres.
+
+Si prefieres máxima cautela, evita ejecutar scripts remotos directos y revisa primero:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh -o /tmp/cogni-install.sh
+less /tmp/cogni-install.sh
+bash /tmp/cogni-install.sh
+```
+
+O compila desde fuente:
+
+```bash
+git clone https://github.com/AdelysAlberto/cogni-memory.git
+cd cogni-memory
+make install
+```
+
+### Qué modifica el instalador
+
+* Crea `~/.local/bin/cogni`.
+* Crea/usa `~/.cogni/` para datos locales.
+* Puede usar `~/.cogni-src/` como caché de fuente.
+* Copia la skill y reglas en carpetas de los arneses seleccionados.
+* En Copilot VS Code, puede crear `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux).
+
+No reemplaza archivos del proyecto actual ni requiere privilegios root para el flujo normal (salvo intentos opcionales de instalar Go si no existe).
 
 ---
 
