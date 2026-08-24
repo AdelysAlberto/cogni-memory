@@ -140,20 +140,44 @@ func (s *Storage) initSchema() error {
 	// Create index on created_at safely
 	_, _ = s.db.Exec("CREATE INDEX IF NOT EXISTS idx_memories_created_at ON agent_memories(created_at DESC)")
 
-	// FTS5 Setup (wrapped in try-catch logic if FTS5 is available)
+	// FTS5 Setup & Triggers for live synchronization
+	// Drop old FTS table/triggers if missing topic_key column or outdated schema
+	_, _ = s.db.Exec("DROP TRIGGER IF EXISTS agent_memories_ai")
+	_, _ = s.db.Exec("DROP TRIGGER IF EXISTS agent_memories_ad")
+	_, _ = s.db.Exec("DROP TRIGGER IF EXISTS agent_memories_au")
+	_, _ = s.db.Exec("DROP TABLE IF EXISTS memories_fts")
+
 	ftsSchema := `
-	CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
+	CREATE VIRTUAL TABLE memories_fts USING fts5(
 		title,
+		topic_key,
 		summary_signature,
 		tags,
 		content='agent_memories',
 		content_rowid='id'
 	);
+
+	CREATE TRIGGER agent_memories_ai AFTER INSERT ON agent_memories BEGIN
+		INSERT INTO memories_fts(rowid, title, topic_key, summary_signature, tags)
+		VALUES (new.id, new.title, new.topic_key, new.summary_signature, new.tags);
+	END;
+
+	CREATE TRIGGER agent_memories_ad AFTER DELETE ON agent_memories BEGIN
+		INSERT INTO memories_fts(memories_fts, rowid, title, topic_key, summary_signature, tags)
+		VALUES ('delete', old.id, old.title, old.topic_key, old.summary_signature, old.tags);
+	END;
+
+	CREATE TRIGGER agent_memories_au AFTER UPDATE ON agent_memories BEGIN
+		INSERT INTO memories_fts(memories_fts, rowid, title, topic_key, summary_signature, tags)
+		VALUES ('delete', old.id, old.title, old.topic_key, old.summary_signature, old.tags);
+		INSERT INTO memories_fts(rowid, title, topic_key, summary_signature, tags)
+		VALUES (new.id, new.title, new.topic_key, new.summary_signature, new.tags);
+	END;
 	`
 	_, _ = s.db.Exec(ftsSchema)
 
 	// Rebuild FTS index from existing memories
-	_, _ = s.db.Exec("INSERT OR REPLACE INTO memories_fts(rowid, title, summary_signature, tags) SELECT id, title, summary_signature, tags FROM agent_memories")
+	_, _ = s.db.Exec("INSERT OR REPLACE INTO memories_fts(rowid, title, topic_key, summary_signature, tags) SELECT id, title, topic_key, summary_signature, tags FROM agent_memories")
 
 	return nil
 }
@@ -349,28 +373,72 @@ func (s *Storage) GetMemoryByTopicKey(projectName, topicKey string) (*core.Memor
 	return &m, nil
 }
 
+// buildFTSQuery cleans input and expands terms with stem prefixes (e.g. utils -> utils* OR util*)
+func buildFTSQuery(query string) string {
+	sanitized := strings.TrimSpace(query)
+	if sanitized == "" {
+		return ""
+	}
+
+	// Remove FTS special characters that break FTS syntax
+	replacer := strings.NewReplacer(
+		"\"", " ", "'", " ", "*", " ", ":", " ", "(", " ", ")", " ",
+		"-", " ", "^", " ", "{", " ", "}", " ", "#", " ", ",", " ",
+	)
+	clean := replacer.Replace(sanitized)
+	words := strings.Fields(clean)
+	if len(words) == 0 {
+		return ""
+	}
+
+	var terms []string
+	for _, w := range words {
+		w = strings.TrimSpace(w)
+		if w == "" {
+			continue
+		}
+		// Generate stem prefix for common plurals / English-Spanish cross-matches
+		lowerW := strings.ToLower(w)
+		stem := lowerW
+		if strings.HasSuffix(lowerW, "utils") {
+			stem = strings.TrimSuffix(lowerW, "s") // "util"
+		} else if strings.HasSuffix(lowerW, "es") && len(lowerW) > 4 {
+			stem = lowerW[:len(lowerW)-2]
+		} else if strings.HasSuffix(lowerW, "s") && len(lowerW) > 3 {
+			stem = lowerW[:len(lowerW)-1]
+		}
+
+		if stem != lowerW && len(stem) >= 3 {
+			terms = append(terms, fmt.Sprintf("(%s* OR %s*)", w, stem))
+		} else {
+			terms = append(terms, fmt.Sprintf("%s*", w))
+		}
+	}
+	return strings.Join(terms, " ")
+}
+
 // SearchMemories performs full-text or fuzzy search across memories
 func (s *Storage) SearchMemories(projectName, query, category string, limit int) ([]core.Memory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	// 1. Try FTS5 match first if available
 	var memories []core.Memory
-	ftsQuery := `
-		SELECT m.id, m.project_name, m.category, m.title, m.topic_key, m.summary_signature, m.tags,
-		       COALESCE(m.created_at, CURRENT_TIMESTAMP), COALESCE(m.updated_at, CURRENT_TIMESTAMP)
-		FROM memories_fts f
-		JOIN agent_memories m ON f.rowid = m.id
-		WHERE (? = '' OR m.project_name = ? OR m.project_name = 'global')
-		  AND (? = '' OR m.category = ?)
-		  AND memories_fts MATCH ?
-		ORDER BY rank
-		LIMIT ?
-	`
-	sanitizedQuery := strings.ReplaceAll(query, "\"", "")
-	if sanitizedQuery != "" {
-		ftsArg := fmt.Sprintf("\"%s\"*", sanitizedQuery)
+
+	// 1. Try FTS5 match first if query is non-empty
+	ftsArg := buildFTSQuery(query)
+	if ftsArg != "" {
+		ftsQuery := `
+			SELECT m.id, m.project_name, m.category, m.title, m.topic_key, m.summary_signature, m.tags,
+			       COALESCE(m.created_at, CURRENT_TIMESTAMP), COALESCE(m.updated_at, CURRENT_TIMESTAMP)
+			FROM memories_fts f
+			JOIN agent_memories m ON f.rowid = m.id
+			WHERE (? = '' OR m.project_name = ? OR m.project_name = 'global')
+			  AND (? = '' OR m.category = ?)
+			  AND memories_fts MATCH ?
+			ORDER BY rank
+			LIMIT ?
+		`
 		rows, err := s.db.Query(ftsQuery, projectName, projectName, category, category, ftsArg, limit)
 		if err == nil {
 			defer rows.Close()
@@ -390,19 +458,38 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 		}
 	}
 
-	// 2. Fallback to LIKE query
-	likeQuery := `
+	// 2. Fallback to LIKE query for multi-word / fuzzy matching
+	words := strings.Fields(strings.ReplaceAll(query, "#", ""))
+	if len(words) == 0 {
+		return memories, nil
+	}
+
+	var whereClauses []string
+	var args []interface{}
+
+	whereClauses = append(whereClauses, "(? = '' OR project_name = ? OR project_name = 'global')")
+	args = append(args, projectName, projectName)
+
+	whereClauses = append(whereClauses, "(? = '' OR category = ?)")
+	args = append(args, category, category)
+
+	for _, word := range words {
+		pattern := "%" + word + "%"
+		whereClauses = append(whereClauses, "(title LIKE ? OR topic_key LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)")
+		args = append(args, pattern, pattern, pattern, pattern)
+	}
+
+	likeQuery := fmt.Sprintf(`
 		SELECT id, project_name, category, title, topic_key, summary_signature, tags,
 		       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
 		FROM agent_memories
-		WHERE (? = '' OR project_name = ? OR project_name = 'global')
-		  AND (? = '' OR category = ?)
-		  AND (title LIKE ? OR topic_key LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)
+		WHERE %s
 		ORDER BY created_at DESC
 		LIMIT ?
-	`
-	pattern := "%" + query + "%"
-	rows, err := s.db.Query(likeQuery, projectName, projectName, category, category, pattern, pattern, pattern, pattern, limit)
+	`, strings.Join(whereClauses, " AND "))
+
+	args = append(args, limit)
+	rows, err := s.db.Query(likeQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("search error: %w", err)
 	}

@@ -67,11 +67,16 @@ To prevent signature duplication and database fragmentation, use a structured ` 
 Every summary MUST follow this high-density 4-part structured format:
 ` + "`What: <One sentence description of what was done> | Why: <Motivation or root cause> | Where: <Key files/paths affected> | Learned: <Gotchas or key learnings (omit if none)>`" + `
 
-### 5. 3-Layer Tag Taxonomy
+### 5. 3-Layer Tag Taxonomy & Cross-Language Keywords
 Include 3 to 5 lowercase, kebab-case tags:
-1. **Layer 1 - Main Concept**: Generic technical domain (` + "`pagination`" + `, ` + "`auth`" + `, ` + "`state-management`" + `, ` + "`database`" + `).
-2. **Layer 2 - Technology / Stack**: Exact tech stack (` + "`go`" + `, ` + "`sqlite`" + `, ` + "`zustand`" + `, ` + "`react`" + `, ` + "`css-modules`" + `).
-3. **Layer 3 - Specific Module**: Project domain entity (` + "`products-list`" + `, ` + "`jwt-middleware`" + `).
+1. **Layer 1 - Main Concept**: Generic technical domain (` + "`pagination`" + `, ` + "`auth`" + `, ` + "`state-management`" + `, ` + "`database`" + `, ` + "`utils`" + `).
+2. **Layer 2 - Technology / Stack**: Exact tech stack (` + "`go`" + `, ` + "`sqlite`" + `, ` + "`zustand`" + `, ` + "`react`" + `, ` + "`css-modules`" + `, ` + "`redis`" + `).
+3. **Layer 3 - Specific Module**: Project domain entity (` + "`products-list`" + `, ` + "`jwt-middleware`" + `, ` + "`config-util`" + `).
+
+**Bilingual & Technical Keyword Rule**:
+- ` + "`topic_key`" + ` MUST ALWAYS be technical English (` + "`config.util`" + `, ` + "`arch/auth/jwt`" + `).
+- ` + "`title`" + `: If Spanish is used in the title (e.g. ` + "`\"Utilidad de Configuración Dinámica\"`" + `), include technical English terms/code identifiers in parentheses or topic suffix, e.g., ` + "`\"Utilidad de Configuración Dinámica (Dynamic Config Utils) (config.util)\"`" + `.
+- ` + "`tags`" + `: Always include primary English technical keywords (e.g. ` + "`utils,config,redis`" + `) so searches in either English or Spanish match effortlessly.
 
 ---
 
@@ -101,7 +106,8 @@ const RuleContent = `# 🧠 Cogni Memory Invariants
 - Before completing any high-signal task (e.g. bugfix with non-obvious cause, architectural decision, library selection, build setup, coding standard), save or update it in memory.
 - Use a deterministic **` + "`topic_key`" + `** (format: ` + "`<domain>/<subdomain>/<topic>`" + `, ej. ` + "`arch/auth/jwt`" + `) so that subsequent runs **upsert** existing records instead of generating duplicates.
 - Structure every summary strictly as: ` + "`What: ... | Why: ... | Where: ... | Learned: ...`" + `
-- Tags must follow the 3-layer taxonomy: main concept, tech stack, specific module.
+- Tags must follow the 3-layer taxonomy (main concept, tech stack, specific module) and include primary technical English keywords (e.g. ` + "`utils`" + `, ` + "`config`" + `, ` + "`auth`" + `).
+- ` + "`topic_key`" + ` must be technical English (` + "`config.util`" + `, ` + "`arch/auth/jwt`" + `). If ` + "`title`" + ` is in Spanish, include the English code alias in parentheses (e.g. ` + "`\"Utilidad de Configuración (config.util)\"`" + `).
 `
 
 // InstallSkill writes the embedded SKILL.md to the specified directory

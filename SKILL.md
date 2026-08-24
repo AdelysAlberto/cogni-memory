@@ -63,11 +63,16 @@ To prevent signature duplication and database fragmentation, use a structured `-
 Every summary MUST follow this high-density 4-part structured format:
 `What: <One sentence description of what was done> | Why: <Motivation or root cause> | Where: <Key files/paths affected> | Learned: <Gotchas or key learnings (omit if none)>`
 
-### 5. 3-Layer Tag Taxonomy
+### 5. 3-Layer Tag Taxonomy & Cross-Language Keywords
 Include 3 to 5 lowercase, kebab-case tags:
-1. **Layer 1 - Main Concept**: Generic technical domain (`pagination`, `auth`, `state-management`, `database`).
-2. **Layer 2 - Technology / Stack**: Exact tech stack (`go`, `sqlite`, `zustand`, `react`, `css-modules`).
-3. **Layer 3 - Specific Module**: Project domain entity (`products-list`, `jwt-middleware`).
+1. **Layer 1 - Main Concept**: Generic technical domain (`pagination`, `auth`, `state-management`, `database`, `utils`).
+2. **Layer 2 - Technology / Stack**: Exact tech stack (`go`, `sqlite`, `zustand`, `react`, `css-modules`, `redis`).
+3. **Layer 3 - Specific Module**: Project domain entity (`products-list`, `jwt-middleware`, `config-util`).
+
+**Bilingual & Technical Keyword Rule**:
+- `topic_key` MUST ALWAYS be technical English (`config.util`, `arch/auth/jwt`).
+- `title`: If Spanish is used in the title (e.g. `"Utilidad de Configuración Dinámica"`), include technical English terms/code identifiers in parentheses or topic suffix, e.g., `"Utilidad de Configuración Dinámica (Dynamic Config Utils) (config.util)"`.
+- `tags`: Always include primary English technical keywords (e.g. `utils,config,redis`) so searches in either English or Spanish match effortlessly.
 
 ---
 

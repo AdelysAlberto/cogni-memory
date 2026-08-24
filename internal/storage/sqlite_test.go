@@ -109,3 +109,56 @@ func TestStorageCRUD(t *testing.T) {
 		t.Errorf("Expected nil memory after deletion, got %+v", afterDel)
 	}
 }
+
+func TestFTSTagsAndStemSearch(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cogni-fts-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_fts.db")
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize storage: %v", err)
+	}
+	defer s.Close()
+
+	// Save memory with Spanish Title and English tag / topic_key
+	mem := &core.Memory{
+		ProjectName:      "viasera",
+		Category:         "config",
+		Title:            "Utilidad de Configuración Dinámica con Caché Redis y Fallback (config.util)",
+		TopicKey:         "config.util",
+		SummarySignature: "What: Creadas funciones getSystemConfig y setSystemConfig | Why: Redis cache | Where: src/config.ts",
+		Tags:             "viasera,utils,config,redis,cache,fallback",
+	}
+
+	saved, err := s.SaveMemory(mem)
+	if err != nil {
+		t.Fatalf("Failed to save memory: %v", err)
+	}
+
+	// 1. Search by exact English tag "utils" -> should match via FTS live trigger and tag index!
+	resUtils, err := s.SearchMemories("viasera", "utils", "", 10)
+	if err != nil {
+		t.Fatalf("Search by 'utils' failed: %v", err)
+	}
+	if len(resUtils) == 0 {
+		t.Errorf("Expected to find memory by tag 'utils', got 0 results")
+	} else if resUtils[0].ID != saved.ID {
+		t.Errorf("Expected memory ID %d, got %d", saved.ID, resUtils[0].ID)
+	}
+
+	// 2. Search by "utils" stem matching "Utilidad" in Spanish Title
+	resUtil, err := s.SearchMemories("viasera", "util", "", 10)
+	if err != nil || len(resUtil) == 0 {
+		t.Errorf("Expected to find memory by stem 'util', got 0 results")
+	}
+
+	// 3. Search by topic_key "config.util"
+	resTopic, err := s.SearchMemories("viasera", "config.util", "", 10)
+	if err != nil || len(resTopic) == 0 {
+		t.Errorf("Expected to find memory by topic_key 'config.util', got 0 results")
+	}
+}
