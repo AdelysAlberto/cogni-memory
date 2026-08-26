@@ -71,7 +71,7 @@ func Execute(args []string) int {
 	case "ui":
 		return handleUI(cmdArgs)
 	case "skill", "skills":
-		promptAndInstallSkills(len(cmdArgs) > 0 && cmdArgs[0] == "--all")
+		promptAndInstallSkills("", len(cmdArgs) > 0 && cmdArgs[0] == "--all")
 		return 0
 	case "uninstall":
 		return handleUninstall(cmdArgs)
@@ -142,9 +142,10 @@ func getStorage(customPath string, forceGlobal bool) (*storage.Storage, error) {
 
 func handleInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	project  := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
-	noSkills := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
-	allSkills := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
+	project     := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
+	noSkills    := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
+	allSkills   := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
+	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, opencode, local, copilot, hermes, all, none)")
 	// --global mantenido como alias de retrocompatibilidad (comportamiento idéntico al default)
 	_ = fs.Bool("global", false, "")
 	_ = fs.Parse(args)
@@ -181,14 +182,14 @@ func handleInit(args []string) int {
 		fmt.Printf("✅ Cogni global inicializado en: %s\n", dbPath)
 
 		if !*noSkills {
-			promptAndInstallSkills(*allSkills)
+			promptAndInstallSkills(*harnessFlag, *allSkills)
 		}
 	}
 
 	return 0
 }
 
-func promptAndInstallSkills(autoAll bool) {
+func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
@@ -196,9 +197,9 @@ func promptAndInstallSkills(autoAll bool) {
 
 	harnesses := core.GetHarnessSkillPaths(home)
 
-	// Intentar cargar configuración guardada previa
+	// Intentar cargar configuración guardada previa al actualizar
 	cfg, _ := core.LoadConfig(home)
-	if autoAll && cfg != nil && len(cfg.SelectedHarnesses) > 0 {
+	if harnessFlag == "" && autoAll && cfg != nil && len(cfg.SelectedHarnesses) > 0 {
 		fmt.Println("🔄 Cogni Upgrade: Actualizando arneses configurados previamente...")
 		for _, h := range cfg.SelectedHarnesses {
 			if paths, ok := harnesses[h]; ok {
@@ -223,15 +224,38 @@ func promptAndInstallSkills(autoAll bool) {
 	}
 
 	choice := ""
-	if autoAll {
+	if harnessFlag != "" {
+		switch strings.ToLower(harnessFlag) {
+		case "antigravity", "1":
+			choice = "1"
+		case "cursor", "2":
+			choice = "2"
+		case "claude", "3":
+			choice = "3"
+		case "opencode", "4":
+			choice = "4"
+		case "local", "agents", "5":
+			choice = "5"
+		case "copilot", "6":
+			choice = "6"
+		case "hermes", "7":
+			choice = "7"
+		case "all", "8":
+			choice = "8"
+		case "none", "9":
+			choice = "9"
+		default:
+			choice = harnessFlag
+		}
+	} else if autoAll {
 		choice = "8"
 	} else {
 		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
-		fmt.Println("1) Proyecto actual (.agents/skills/)")
-		fmt.Println("2) Gemini Antigravity (~/.gemini/config/skills/)")
-		fmt.Println("3) Cursor IDE (~/.cursor/skills/)")
-		fmt.Println("4) Claude Code / Desktop (~/.claude/skills/)")
-		fmt.Println("5) OpenCode (~/.config/opencode/skills/ & ~/.agents/skills/)")
+		fmt.Println("1) Gemini Antigravity (~/.gemini/config/skills/)")
+		fmt.Println("2) Cursor IDE (~/.cursor/skills/)")
+		fmt.Println("3) Claude Code / Desktop (~/.claude/skills/)")
+		fmt.Println("4) OpenCode (~/.config/opencode/skills/ & ~/.agents/skills/)")
+		fmt.Println("5) Agentes Estándar (~/.agents/skills/)")
 		fmt.Println("6) GitHub Copilot (~/.agents/skills/ & ~/.copilot/skills/)")
 		fmt.Println("7) Hermes CLI (~/.hermes/skills/)")
 		fmt.Println("8) Instalar en TODOS los entornos detectados (Recomendado)")
@@ -250,34 +274,34 @@ func promptAndInstallSkills(autoAll bool) {
 
 	switch choice {
 	case "1":
-		selectedHarnesses = []string{"local"}
-		for _, p := range harnesses["local"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en: %s\n", p)
-		}
-	case "2":
 		selectedHarnesses = []string{"antigravity"}
 		for _, p := range harnesses["antigravity"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Antigravity: %s\n", p)
 		}
-	case "3":
+	case "2":
 		selectedHarnesses = []string{"cursor"}
 		for _, p := range harnesses["cursor"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Cursor: %s\n", p)
 		}
-	case "4":
+	case "3":
 		selectedHarnesses = []string{"claude"}
 		for _, p := range harnesses["claude"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en Claude: %s\n", p)
 		}
-	case "5":
+	case "4":
 		selectedHarnesses = []string{"opencode"}
 		for _, p := range harnesses["opencode"] {
 			_ = core.InstallSkill(p)
 			fmt.Printf("  -> Skill instalada en OpenCode: %s\n", p)
+		}
+	case "5":
+		selectedHarnesses = []string{"local"}
+		for _, p := range harnesses["local"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Agentes Estándar: %s\n", p)
 		}
 	case "6":
 		selectedHarnesses = []string{"copilot"}

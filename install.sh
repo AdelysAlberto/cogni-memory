@@ -169,11 +169,13 @@ echo "8) Instalar en TODOS los entornos detectados (Recomendado)"
 echo "9) Omitir instalación de Skill"
 echo ""
 
-HARNESS_CHOICE=""
-if [ -t 0 ]; then
-    read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE || true
-elif [ -r /dev/tty ]; then
-    read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
+HARNESS_CHOICE="${HARNESS_CHOICE:-}"
+if [ -z "$HARNESS_CHOICE" ]; then
+    if [ -t 0 ]; then
+        read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE || true
+    elif [ -r /dev/tty ]; then
+        read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
+    fi
 fi
 
 if [ -z "$HARNESS_CHOICE" ]; then
@@ -319,31 +321,48 @@ install_claude() {
     fi
 }
 
+HARNESS_FLAG=""
 case $HARNESS_CHOICE in
-    1) install_antigravity ;;
-    2) install_cursor ;;
-    3) install_claude ;;
-    4) install_opencode ;;
-    5) install_agents_std ;;
-    6) install_copilot ;;
-    7) install_hermes ;;
-    8|*) 
-        echo "🚀 Registrando en todos los arneses de IA..."
-        install_antigravity
-        install_cursor
-        install_claude
-        install_opencode
-        install_agents_std
-        install_copilot
-        install_hermes
-        ;;
-    9) echo "⏭️ Instalación de skill omitida." ;;
+    1) HARNESS_FLAG="antigravity" ;;
+    2) HARNESS_FLAG="cursor" ;;
+    3) HARNESS_FLAG="claude" ;;
+    4) HARNESS_FLAG="opencode" ;;
+    5) HARNESS_FLAG="local" ;;
+    6) HARNESS_FLAG="copilot" ;;
+    7) HARNESS_FLAG="hermes" ;;
+    8) HARNESS_FLAG="all" ;;
+    9) HARNESS_FLAG="none" ;;
+    *) HARNESS_FLAG="all" ;;
 esac
+
+if [ "$HARNESS_FLAG" != "none" ]; then
+    case $HARNESS_FLAG in
+        antigravity) install_antigravity ;;
+        cursor)      install_cursor ;;
+        claude)      install_claude ;;
+        opencode)    install_opencode ;;
+        local)       install_agents_std ;;
+        copilot)     install_copilot ;;
+        hermes)      install_hermes ;;
+        all) 
+            echo "🚀 Registrando en todos los arneses de IA..."
+            install_antigravity
+            install_cursor
+            install_claude
+            install_opencode
+            install_agents_std
+            install_copilot
+            install_hermes
+            ;;
+    esac
+else
+    echo "⏭️ Instalación de skill omitida."
+fi
 
 # Inicializar base de datos global y configurar MCP Servers
 echo ""
 echo "🗄️ Inicializando almacenamiento SQLite y configurando Servidores MCP..."
-"$BIN_INSTALL_DIR/cogni" init --all
+"$BIN_INSTALL_DIR/cogni" init --harness "$HARNESS_FLAG"
 
 echo ""
 echo "✅ [Cogni] ¡Instalación completada con éxito!"
