@@ -17,9 +17,11 @@ fi
 echo "  -> Limpiando skills en arneses de IA..."
 rm -rf "$HOME_DIR/.gemini/config/skills/cogni" "$HOME_DIR/.gemini/config/skills/agent-memory"
 rm -rf "$HOME_DIR/.cursor/skills/cogni" "$HOME_DIR/.cursor/skills/agent-memory"
+rm -rf "$HOME_DIR/.claude/skills/cogni" "$HOME_DIR/.claude/skills/agent-memory"
 rm -rf "$HOME_DIR/.config/opencode/skills/cogni" "$HOME_DIR/.agents/skills/cogni"
 rm -rf "$HOME_DIR/.copilot/skills/cogni"
 rm -rf "$HOME_DIR/.hermes/skills/cogni"
+rm -f "$HOME_DIR/.gemini/config/rules/cogni.rules.md" "$HOME_DIR/.cursor/rules/cogni.rules.md" "$HOME_DIR/.claude/rules/cogni.rules.md" "$HOME_DIR/.config/opencode/rules/cogni.rules.md" "$HOME_DIR/.agents/rules/cogni.rules.md" "$HOME_DIR/.hermes/rules/cogni.rules.md"
 rm -f "$VSCODE_PROMPTS_LINUX" "$VSCODE_PROMPTS_MACOS"
 
 echo ""

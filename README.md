@@ -69,7 +69,7 @@ Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
-*El script detectará automáticamente los arneses de IA instalados (`.gemini`, `.cursor`, `.agents`, `.copilot`, `.opencode`, `.hermes`) y registrará la skill de Cogni.*
+*El script detectará automáticamente los arneses de IA instalados (`.gemini`, `.cursor`, `.claude`, `.agents`, `.copilot`, `.opencode`, `.hermes`) y registrará la skill de Cogni.*
 
 *Para GitHub Copilot en VS Code, además de la skill, el instalador crea una instrucción global en `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux) o `~/Library/Application Support/Code/User/prompts/cogni-copilot.instructions.md` (macOS) para reforzar búsqueda/guardado obligatorio cuando el CLI `cogni` está disponible.*
 

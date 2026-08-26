@@ -160,24 +160,25 @@ echo ""
 echo "🤖 Selecciona el entorno o Harness de IA que utilizas:"
 echo "1) Gemini Antigravity    (~/.gemini/config/skills/cogni/)"
 echo "2) Cursor IDE            (~/.cursor/skills/cogni/)"
-echo "3) OpenCode              (~/.config/opencode/skills/ & ~/.agents/skills/)"
-echo "4) Agentes Estándar      (~/.agents/skills/cogni/)"
-echo "5) GitHub Copilot        (~/.agents/skills/cogni/)  [VS Code / Copilot Chat]"
-echo "6) Hermes CLI            (~/.hermes/skills/cogni/)"
-echo "7) Instalar en TODOS los entornos detectados (Recomendado)"
-echo "8) Omitir instalación de Skill"
+echo "3) Claude Code / Desktop (~/.claude/skills/cogni/)"
+echo "4) OpenCode              (~/.config/opencode/skills/ & ~/.agents/skills/)"
+echo "5) Agentes Estándar      (~/.agents/skills/cogni/)"
+echo "6) GitHub Copilot        (~/.agents/skills/cogni/)  [VS Code / Copilot Chat]"
+echo "7) Hermes CLI            (~/.hermes/skills/cogni/)"
+echo "8) Instalar en TODOS los entornos detectados (Recomendado)"
+echo "9) Omitir instalación de Skill"
 echo ""
 
 HARNESS_CHOICE=""
 if [ -t 0 ]; then
-    read -p "Ingresa tu opción (1-8) [por defecto: 7]: " HARNESS_CHOICE || true
+    read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE || true
 elif [ -r /dev/tty ]; then
-    read -p "Ingresa tu opción (1-8) [por defecto: 7]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
+    read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
 fi
 
 if [ -z "$HARNESS_CHOICE" ]; then
-    echo "ℹ️ Modo no interactivo detectado. Seleccionando opción 7 (TODOS los entornos por defecto)..."
-    HARNESS_CHOICE=7
+    echo "ℹ️ Modo no interactivo detectado. Seleccionando opción 8 (TODOS los entornos por defecto)..."
+    HARNESS_CHOICE=8
 fi
 
 # ─── Módulo: Gemini Antigravity ─────────────────────────────────────────────
@@ -304,24 +305,39 @@ install_hermes() {
         cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
     fi
 }
+# ─── Módulo: Claude Code / Desktop ───────────────────────────────────────────
+# Skills:  ~/.claude/skills/<name>/SKILL.md
+# Rules:   ~/.claude/rules/cogni.rules.md
+install_claude() {
+    local skills_dir="$HOME_DIR/.claude/skills"
+    local rules_dir="$HOME_DIR/.claude/rules"
+    echo "  -> [Claude Code / Desktop] Skills: $skills_dir/cogni/ | Rules: $rules_dir/"
+    mkdir -p "$skills_dir/cogni" "$rules_dir"
+    cp -f "$SKILL_SOURCE" "$skills_dir/cogni/SKILL.md"
+    if [ -f "$RULE_SOURCE" ]; then
+        cp -f "$RULE_SOURCE" "$rules_dir/cogni.rules.md"
+    fi
+}
 
 case $HARNESS_CHOICE in
     1) install_antigravity ;;
     2) install_cursor ;;
-    3) install_opencode ;;
-    4) install_agents_std ;;
-    5) install_copilot ;;
-    6) install_hermes ;;
-    7|*) 
+    3) install_claude ;;
+    4) install_opencode ;;
+    5) install_agents_std ;;
+    6) install_copilot ;;
+    7) install_hermes ;;
+    8|*) 
         echo "🚀 Registrando en todos los arneses de IA..."
         install_antigravity
         install_cursor
+        install_claude
         install_opencode
         install_agents_std
         install_copilot
         install_hermes
         ;;
-    8) echo "⏭️ Instalación de skill omitida." ;;
+    9) echo "⏭️ Instalación de skill omitida." ;;
 esac
 
 # Inicializar base de datos global y configurar MCP Servers

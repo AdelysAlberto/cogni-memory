@@ -1104,6 +1104,8 @@ func handleUninstall(args []string) int {
 		filepath.Join(home, ".gemini", "config", "skills", "agent-memory"),
 		filepath.Join(home, ".cursor", "skills", "cogni"),
 		filepath.Join(home, ".cursor", "skills", "agent-memory"),
+		filepath.Join(home, ".claude", "skills", "cogni"),
+		filepath.Join(home, ".claude", "skills", "agent-memory"),
 		filepath.Join(home, ".config", "opencode", "skills", "cogni"),
 		filepath.Join(home, ".agents", "skills", "cogni"),
 		filepath.Join(home, ".copilot", "skills", "cogni"),
