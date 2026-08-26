@@ -162,3 +162,61 @@ func TestFTSTagsAndStemSearch(t *testing.T) {
 		t.Errorf("Expected to find memory by topic_key 'config.util', got 0 results")
 	}
 }
+
+func TestSessionSummaryAndRecentContext(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cogni-session-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_session.db")
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize storage: %v", err)
+	}
+	defer s.Close()
+
+	// 1. Save session summary
+	summary := core.SessionSummary{
+		Goal:          "Implementar optimizaciones de contexto",
+		Accomplished:  "Creadas herramientas cogni_context y cogni_session_summary",
+		Discoveries:   "FTS5 provee búsqueda semántica instantánea",
+		NextSteps:     "Actualizar documentación y skills",
+		RelevantFiles: "internal/mcp/server.go, internal/storage/sqlite.go",
+	}
+
+	savedSession, err := s.SaveSessionSummary("viasera", "session/latest", summary, "context,compaction")
+	if err != nil {
+		t.Fatalf("SaveSessionSummary failed: %v", err)
+	}
+	if savedSession.Category != "session" {
+		t.Errorf("Expected category 'session', got %s", savedSession.Category)
+	}
+
+	// 2. Also save an architectural decision
+	archMem := &core.Memory{
+		ProjectName:      "viasera",
+		Category:         "architecture",
+		Title:            "Decisión: Protocolo en 2 Fases",
+		TopicKey:         "arch/retrieval/protocol",
+		SummarySignature: "What: Búsqueda compacta y luego hidratación | Why: Ahorro de tokens",
+		Tags:             "viasera,retrieval,tokens",
+	}
+	_, err = s.SaveMemory(archMem)
+	if err != nil {
+		t.Fatalf("SaveMemory failed: %v", err)
+	}
+
+	// 3. Test GetRecentContext
+	contextMems, err := s.GetRecentContext("viasera", 5)
+	if err != nil {
+		t.Fatalf("GetRecentContext failed: %v", err)
+	}
+	if len(contextMems) < 2 {
+		t.Fatalf("Expected at least 2 context memories, got %d", len(contextMems))
+	}
+	if contextMems[0].Category != "session" {
+		t.Errorf("Expected session summary first in recent context, got category: %s", contextMems[0].Category)
+	}
+}

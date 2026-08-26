@@ -157,64 +157,82 @@ El agente debe guardar memoria INMEDIATAMENTE tras:
 * ⚙️ **config**: Setup de entorno, herramientas o scripts.
 * 🎨 **pattern**: Convención de naming, estructura de archivos o estándar técnico.
 * 👤 **preference**: Restricción o preferencia explicada por el usuario.
+* 📋 **session**: Resumen de sesión o hito alcanzado al cerrar sesión o tras compactar contexto.
 
-### 2. Estructura Sintética Obligatoria (`--summary`)
+### 2. Estructura Sintética Obligatoria (`--summary` o flags discretos)
+
+Puedes usar la firma en bloque o los flags individuales (`--what`, `--why`, `--where`, `--learned`):
 
 ```text
 What: <Qué se hizo en 1 oración> | Why: <Motivación o causa raíz> | Where: <Archivos/rutas clave> | Learned: <Gotchas o hallazgos>
 ```
 
-### 3. Notificaciones Visuales en Chat
+### 3. Protocolo de Compactación y Cierre de Sesión
+
+* **Al cerrar sesión**: Ejecuta `cogni session-summary --goal "..." --accomplished "..."` para que el siguiente chat no arranque a ciegas.
+* **Tras compactación de contexto (`FIRST ACTION REQUIRED`)**:
+  1. Llama inmediatamente a `cogni session-summary` con el resumen compactado.
+  2. Llama a `cogni context` para recuperar el estado activo.
+  3. Continúa con la tarea.
+
+### 4. Notificaciones Visuales en Chat
 
 * **Al Recuperar**: `🧠 **Memoria Recuperada**: [<proyecto>] "<titulo_o_tema>" (Tags: #tag1, #tag2)`
 * **Al Guardar**: `💾 **Memoria Guardada**: [<proyecto>] "<titulo_breve>" (Category: #category, Tags: #tag1, #tag2)`
-
-### 4. Nota Importante sobre Copilot (VS Code)
-
-En Copilot, una *skill* no siempre se invoca automáticamente por sí sola en cada respuesta. Para reducir omisiones:
-
-* Se instala la skill en rutas actuales y legacy (`~/.agents/skills/cogni/` y `~/.copilot/skills/cogni/`).
-* Se instala una instrucción de enforcement en prompts de usuario para exigir:
-  * búsqueda previa en bugfix no trivial,
-  * guardado/actualización antes de la respuesta final,
-  * confirmación visible de memoria guardada o fallo explícito.
 
 ---
 
 ## 💻 Referencia de Comandos CLI
 
 ```bash
-# Guardar memoria sintética estructurada
-cogni save \
-  --title "Fixed N+1 Query in Product List" \
-  --category "bugfix" \
-  --tags "database,sqlite,products-list" \
-  --summary "What: Added index on category_id and joined queries | Why: Resolves slow load on 10k rows | Where: src/db/products.go | Learned: SQLite EXPLAIN QUERY PLAN required"
+# 1. Bootstrapping rápido de contexto activo (< 100 tokens)
+cogni context
 
-# Buscar firmas semánticas con FTS5 (local y global)
+# 2. Guardar memoria sintética con flags estructurados
+cogni save \
+  --topic-key "arch/db/indexes" \
+  --title "Fixed N+1 Query in Product List" \
+  --what "Added index on category_id and joined queries" \
+  --why "Resolves slow load on 10k rows" \
+  --where "src/db/products.go" \
+  --learned "SQLite EXPLAIN QUERY PLAN required" \
+  --category "bugfix" \
+  --tags "database,sqlite,products-list"
+
+# 3. Guardar resumen de fin de sesión o post-compactación
+cogni session-summary \
+  --goal "Optimizar auth y contexto" \
+  --accomplished "Endpoints creados, tablas migradas" \
+  --where "src/auth/jwt.go"
+
+# 4. Buscar firmas semánticas con FTS5 (local y global)
 cogni search --query "products"
 
-# Actualizar memoria existente por ID para evitar duplicados
+# 5. Obtener contenido completo hidratado por TopicKey o ID (Fase 2)
+cogni get arch/db/indexes
+cogni get --id 6
+
+# 6. Actualizar memoria existente por ID para evitar duplicados
 cogni update --id 6 --summary "What: Updated auth to JWT + Rotation | Why: Security audit | Where: src/auth/jwt.go"
 
-# Promover una memoria local a la BD global centralizada
+# 7. Promover una memoria local a la BD global centralizada
 cogni promote --id 6
 
-# Eliminar una firma por ID
+# 8. Eliminar una firma por ID
 cogni remove --id 6
 
-# Exportar memorias en Markdown o JSON
+# 9. Exportar memorias en Markdown o JSON
 cogni share --format markdown > memorias.md
 cogni share --format json
 
-# Ver métricas de tokens ahorrados y estadísticas
+# 10. Ver métricas de tokens ahorrados y estadísticas
 cogni stats
 
-# Abrir el Dashboard Gráfico en el navegador
+# 11. Abrir el Dashboard Gráfico en el navegador
 cogni ui
 
-# Instalar o actualizar la Skill en arneses de IA
-cogni skill install
+# 12. Instalar o actualizar la Skill en arneses de IA
+cogni skill
 ```
 
 ---

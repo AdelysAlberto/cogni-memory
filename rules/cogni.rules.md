@@ -1,14 +1,18 @@
-# 🧠 Cogni Memory Invariants
+# 🧠 Cogni Memory Invariants & Context Optimization
 
-## 🔍 1. Preflight Search (Mandatory)
-- Before proposing, designing, or implementing a new feature, database schema, API route, state store, or non-trivial logic, execute **`cogni_search`** (MCP tool) or **`cogni search`** (CLI) for the domain keyword.
-- If previous memories are retrieved:
-  - Adhere strictly to the established patterns, configurations, and decisions.
-  - Hydrate only the relevant memories using **`cogni_get`** or **`cogni get`**.
+## 🔍 1. Preflight Search & Task Tag Matching (Mandatory)
+- Before proposing, designing, or implementing a new feature, API route, schema, state store, or bugfix, execute **`cogni_search`** (MCP) or **`cogni search`** (CLI) with the task tags/domain keywords.
+- When previous memories exist, adhere strictly to established patterns and hydrate only required records with **`cogni_get`** to avoid reading entire source files.
+- At session start, call **`cogni_context`** to load the active project context in minimal tokens.
 
-## 💾 2. Postflight Save Gate (Mandatory)
-- Before completing any high-signal task (e.g. bugfix with non-obvious cause, architectural decision, library selection, build setup, coding standard), save or update it in memory.
-- Use a deterministic **`topic_key`** (format: `<domain>/<subdomain>/<topic>`, ej. `arch/auth/jwt`) so that subsequent runs **upsert** existing records instead of generating duplicates.
-- Structure every summary strictly as: `What: ... | Why: ... | Where: ... | Learned: ...`
-- Tags must follow the 3-layer taxonomy (main concept, tech stack, specific module) and include primary technical English keywords (e.g. `utils`, `config`, `auth`).
-- `topic_key` must be technical English (`config.util`, `arch/auth/jwt`). If `title` is in Spanish, include the English code alias in parentheses (e.g. `"Utilidad de Configuración (config.util)"`).
+## 💾 2. Postflight Save Gate & Delivery Guarantee (Mandatory)
+- Before completing any high-signal task (bugfix, architectural decision, library selection, build setup, convention), save or update it in memory.
+- Structure every summary as: `What: ... | Why: ... | Where: ... | Learned: ...`
+- Use a deterministic **`topic_key`** (`<domain>/<subdomain>/<topic>`) so subsequent runs **upsert** existing records.
+- **Delivery Guarantee**: Saving memory is internal bookkeeping. Always save BEFORE composing the final reply and never replace the complete user answer with a one-line "saved" acknowledgement.
+
+## ⚡ 3. Compaction & Session Summary Protocol
+- When a context compaction happens or you see "FIRST ACTION REQUIRED":
+  1. Call **`cogni_session_summary`** immediately with the compacted summary to persist state.
+  2. Call **`cogni_context`** to recover active project context.
+  3. Continue with the task.

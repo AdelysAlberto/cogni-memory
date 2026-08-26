@@ -613,6 +613,81 @@ func (s *Storage) GetStats() (*core.Stats, error) {
 	}, nil
 }
 
+// GetRecentContext retrieves recent high-signal memories (sessions, architecture, decisions, bugfixes)
+// for immediate context bootstrapping at session start or after compaction.
+func (s *Storage) GetRecentContext(projectName string, limit int) ([]core.Memory, error) {
+	if limit <= 0 {
+		limit = 5
+	}
+
+	query := `
+		SELECT id, project_name, category, title, topic_key, summary_signature, tags,
+		       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
+		FROM agent_memories
+		WHERE (? = '' OR project_name = ? OR project_name = 'global')
+		ORDER BY 
+			CASE 
+				WHEN category = 'session' THEN 1
+				WHEN category IN ('architecture', 'decision') THEN 2
+				WHEN category = 'bugfix' THEN 3
+				ELSE 4
+			END ASC,
+			updated_at DESC
+		LIMIT ?
+	`
+	rows, err := s.db.Query(query, projectName, projectName, limit)
+	if err != nil {
+		return nil, fmt.Errorf("error querying recent context: %w", err)
+	}
+	defer rows.Close()
+
+	var memories []core.Memory
+	for rows.Next() {
+		var m core.Memory
+		var cStr, uStr string
+		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
+			return nil, err
+		}
+		m.CreatedAt = parseTime(cStr)
+		m.UpdatedAt = parseTime(uStr)
+		m.Source = s.source
+		memories = append(memories, m)
+	}
+
+	return memories, nil
+}
+
+// SaveSessionSummary records a structured session summary or post-compaction record
+func (s *Storage) SaveSessionSummary(projectName, topicKey string, summary core.SessionSummary, tags string) (*core.Memory, error) {
+	if topicKey == "" {
+		topicKey = "session/latest"
+	}
+	formattedSummary := core.FormatSessionSummary(summary)
+	title := "Resumen de Sesión: " + summary.Goal
+	if len(summary.Goal) > 60 {
+		title = "Resumen de Sesión: " + summary.Goal[:57] + "..."
+	}
+	if summary.Goal == "" {
+		title = "Resumen de Sesión (" + time.Now().Format("2006-01-02 15:04") + ")"
+	}
+
+	allTags := core.FormatTags(tags, projectName)
+	if !strings.Contains(allTags, "session") {
+		allTags = "session," + allTags
+	}
+
+	mem := &core.Memory{
+		ProjectName:      projectName,
+		Category:         "session",
+		Title:            title,
+		TopicKey:         topicKey,
+		SummarySignature: formattedSummary,
+		Tags:             allTags,
+	}
+
+	return s.SaveMemory(mem)
+}
+
 func parseTime(tStr string) time.Time {
 	formats := []string{
 		"2006-01-02 15:04:05",
@@ -627,3 +702,4 @@ func parseTime(tStr string) time.Time {
 	}
 	return time.Now()
 }
+

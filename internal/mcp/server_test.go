@@ -20,20 +20,23 @@ func TestMCPServerTools(t *testing.T) {
 
 	server := NewServer("test-v1")
 	tools := server.getToolsList()
-	if len(tools) != 5 {
-		t.Errorf("Expected 5 tools, got %d", len(tools))
+	if len(tools) != 7 {
+		t.Errorf("Expected 7 tools, got %d", len(tools))
 	}
 
-	// 1. Test cogni_save with topic_key
-	saveArgs := map[string]any{
+	// 1. Test cogni_save with structured fields (what, why, where, learned)
+	saveStructuredArgs := map[string]any{
 		"title":     "JWT Refresh Flow",
 		"topic_key": "arch/auth/jwt",
 		"category":  "architecture",
 		"tags":      "auth,jwt,security",
-		"summary":   "What: Implemented refresh token rotation | Why: Security audit | Where: auth/jwt.go | Learned: Rotation prevents replay",
+		"what":      "Implemented refresh token rotation",
+		"why":       "Security audit",
+		"where":     "auth/jwt.go",
+		"learned":   "Rotation prevents replay",
 		"project":   "test-project",
 	}
-	saveBytes, _ := json.Marshal(saveArgs)
+	saveBytes, _ := json.Marshal(saveStructuredArgs)
 	res, isErr := server.executeTool("cogni_save", saveBytes)
 	if isErr {
 		t.Fatalf("cogni_save failed: %s", res)
@@ -66,8 +69,8 @@ func TestMCPServerTools(t *testing.T) {
 	if isErr {
 		t.Fatalf("cogni_get failed: %s", getRes)
 	}
-	if !strings.Contains(getRes, "Implemented refresh token rotation") {
-		t.Errorf("Expected get result to contain full summary, got: %s", getRes)
+	if !strings.Contains(getRes, "What: Implemented refresh token rotation") {
+		t.Errorf("Expected get result to contain full structured summary, got: %s", getRes)
 	}
 
 	// 4. Test cogni_save upsert behavior with same topic_key
@@ -89,5 +92,38 @@ func TestMCPServerTools(t *testing.T) {
 	getRes2, _ := server.executeTool("cogni_get", getBytes)
 	if !strings.Contains(getRes2, "JWT Refresh Flow V2") {
 		t.Errorf("Expected upserted title in get result, got: %s", getRes2)
+	}
+
+	// 5. Test cogni_session_summary
+	sessionArgs := map[string]any{
+		"goal":          "Integrar autenticación JWT y optimización de contexto",
+		"accomplished":  "Endpoints de auth creados, migraciones aplicadas",
+		"discoveries":   "Modernc sqlite requiere WAL mode para alta concurrencia",
+		"next_steps":    "Escribir tests de integración E2E",
+		"relevant_files": "internal/auth/jwt.go, internal/storage/sqlite.go",
+		"project":       "test-project",
+		"topic_key":     "session/latest",
+	}
+	sessionBytes, _ := json.Marshal(sessionArgs)
+	sessionRes, isErr := server.executeTool("cogni_session_summary", sessionBytes)
+	if isErr {
+		t.Fatalf("cogni_session_summary failed: %s", sessionRes)
+	}
+	if !strings.Contains(sessionRes, "Resumen de sesión persistido") {
+		t.Errorf("Unexpected session summary output: %s", sessionRes)
+	}
+
+	// 6. Test cogni_context
+	contextArgs := map[string]any{
+		"project": "test-project",
+		"limit":   5,
+	}
+	contextBytes, _ := json.Marshal(contextArgs)
+	contextRes, isErr := server.executeTool("cogni_context", contextBytes)
+	if isErr {
+		t.Fatalf("cogni_context failed: %s", contextRes)
+	}
+	if !strings.Contains(contextRes, "Contexto Activo Reciente") || !strings.Contains(contextRes, "Resumen de Sesión") {
+		t.Errorf("Expected context output to include active session and memories, got: %s", contextRes)
 	}
 }

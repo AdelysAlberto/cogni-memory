@@ -35,6 +35,10 @@ func Execute(args []string) int {
 		return handleInit(cmdArgs)
 	case "save":
 		return handleSave(cmdArgs)
+	case "context":
+		return handleContext(cmdArgs)
+	case "session-summary", "compact":
+		return handleSessionSummary(cmdArgs)
 	case "search":
 		return handleSearch(cmdArgs)
 	case "get":
@@ -92,21 +96,23 @@ Uso:
   cogni <comando> [argumentos...]
 
 Comandos Principales:
-  init        Inicializa Cogni globalmente (~/.cogni/) e instala skills de IA
-  save        Guarda o actualiza (upsert) una firma de memoria sintética
-  search      Busca firmas de memoria con FTS5 (previews compactas para ahorrar tokens)
-  get         Recupera una memoria completa por ID o por TopicKey determinístico
-  mcp         Inicia el servidor nativo MCP (Model Context Protocol) por stdio
-  update      Actualiza una memoria existente por su ID
-  promote     Promueve una memoria de local a global (o viceversa)
-  remove      Elimina una memoria por su ID
-  share       Exporta o comparte firmas de memoria (Markdown / JSON)
-  list        Lista las memorias registradas
-  stats       Muestra métricas y tokens ahorrados
-  ui          Abre el dashboard gráfico interactivo en el navegador
-  skill       Instala o actualiza el Skill en tus arneses de IA
-  uninstall   Desinstala Cogni, elimina el binario y limpia las skills
-  version     Muestra la versión de Cogni
+  init             Inicializa Cogni globalmente (~/.cogni/) e instala skills de IA
+  save             Guarda o actualiza (upsert) una firma de memoria sintética
+  context          Muestra el contexto activo reciente del proyecto (alta señal, bajo token)
+  session-summary  Guarda un resumen estructurado al cerrar sesión o tras compactar
+  search           Busca firmas de memoria con FTS5 (previews compactas para ahorrar tokens)
+  get              Recupera una memoria completa por ID o por TopicKey determinístico
+  mcp              Inicia el servidor nativo MCP (Model Context Protocol) por stdio
+  update           Actualiza una memoria existente por su ID
+  promote          Promueve una memoria de local a global (o viceversa)
+  remove           Elimina una memoria por su ID
+  share            Exporta o comparte firmas de memoria (Markdown / JSON)
+  list             Lista las memorias registradas
+  stats            Muestra métricas y tokens ahorrados
+  ui               Abre el dashboard gráfico interactivo en el navegador
+  skill            Instala o actualiza el Skill en tus arneses de IA
+  uninstall        Desinstala Cogni, elimina el binario y limpia las skills
+  version          Muestra la versión de Cogni
 
 Flags de init:
   --project   Inicializa solo el almacén local (.cogni/) en el proyecto actual, sin instalar skills
@@ -334,6 +340,10 @@ func handleSave(args []string) int {
 	title := fs.String("title", "", "Título o hito de la memoria")
 	topicKey := fs.String("topic-key", "", "Clave temática determinística para posibilitar upserts (ej: 'sdd/auth/spec')")
 	summary := fs.String("summary", "", "Resumen sintético de la memoria")
+	what := fs.String("what", "", "Qué se hizo (una oración descriptiva)")
+	why := fs.String("why", "", "Motivo o causa raíz")
+	where := fs.String("where", "", "Archivos o rutas afectadas")
+	learned := fs.String("learned", "", "Gotchas o aprendizajes")
 	category := fs.String("category", "general", "Categoría")
 	tags := fs.String("tags", "", "Tags separados por coma")
 	global := fs.Bool("global", false, "Guardar en la base de datos global")
@@ -342,8 +352,13 @@ func handleSave(args []string) int {
 
 	_ = fs.Parse(args)
 
-	if *title == "" || *summary == "" {
-		fmt.Fprintln(os.Stderr, "Error: --title y --summary son obligatorios.")
+	finalSummary := *summary
+	if finalSummary == "" && (*what != "" || *why != "" || *where != "" || *learned != "") {
+		finalSummary = core.BuildSummarySignature(*what, *why, *where, *learned)
+	}
+
+	if *title == "" || finalSummary == "" {
+		fmt.Fprintln(os.Stderr, "Error: --title y (--summary o --what/--why/--where/--learned) son obligatorios.")
 		return 1
 	}
 
@@ -377,7 +392,7 @@ func handleSave(args []string) int {
 		Category:         *category,
 		Title:            *title,
 		TopicKey:         *topicKey,
-		SummarySignature: *summary,
+		SummarySignature: finalSummary,
 		Tags:             formattedTags,
 	}
 
@@ -399,7 +414,130 @@ func handleSave(args []string) int {
 		}
 		fmt.Printf("Categoría: %s\n", saved.Category)
 		fmt.Printf("Tags: %s\n", saved.Tags)
+		fmt.Printf("Resumen: %s\n", saved.SummarySignature)
 		fmt.Printf("Ubicación BD: %s\n", s.DBPath())
+	}
+
+	return 0
+}
+
+func handleContext(args []string) int {
+	fs := flag.NewFlagSet("context", flag.ExitOnError)
+	project := fs.String("project", "", "Filtrar por proyecto")
+	limit := fs.Int("limit", 5, "Límite de resultados")
+	globalOnly := fs.Bool("global", false, "Buscar solo en BD global")
+	asJSON := fs.Bool("json", false, "Salida en JSON")
+
+	_ = fs.Parse(args)
+
+	projectName := *project
+	if projectName == "" && !*globalOnly {
+		projectName = core.DetectProjectName()
+	}
+
+	localStorage, globalStorage := getStorages()
+	if localStorage != nil {
+		defer localStorage.Close()
+	}
+	if globalStorage != nil {
+		defer globalStorage.Close()
+	}
+
+	var memories []core.Memory
+	if localStorage != nil && !*globalOnly {
+		mems, _ := localStorage.GetRecentContext(projectName, *limit)
+		memories = append(memories, mems...)
+	}
+	if globalStorage != nil && len(memories) < *limit {
+		mems, _ := globalStorage.GetRecentContext(projectName, *limit-len(memories))
+		memories = append(memories, mems...)
+	}
+
+	if *asJSON {
+		_ = json.NewEncoder(os.Stdout).Encode(memories)
+		return 0
+	}
+
+	if len(memories) == 0 {
+		fmt.Printf("⚡ No hay contexto reciente registrado para '%s'.\n", projectName)
+		return 0
+	}
+
+	fmt.Printf("⚡ **Contexto Activo Reciente para [%s]** (%d memorias clave):\n\n", projectName, len(memories))
+	for _, m := range memories {
+		srcBadge := "LOCAL"
+		if m.Source == "global" {
+			srcBadge = "GLOBAL"
+		}
+		topicStr := ""
+		if m.TopicKey != "" {
+			topicStr = fmt.Sprintf(" | Key: %s", m.TopicKey)
+		}
+		fmt.Printf("▶ [#%d %s] [%s] %s%s\n  %s\n\n",
+			m.ID, srcBadge, m.Category, m.Title, topicStr, m.SummarySignature)
+	}
+
+	return 0
+}
+
+func handleSessionSummary(args []string) int {
+	fs := flag.NewFlagSet("session-summary", flag.ExitOnError)
+	goal := fs.String("goal", "", "Objetivo principal de la sesión")
+	accomplished := fs.String("accomplished", "", "Logros y tareas completadas")
+	discoveries := fs.String("discoveries", "", "Hallazgos y decisiones clave")
+	nextSteps := fs.String("next-steps", "", "Próximos pasos pendientes")
+	where := fs.String("where", "", "Archivos clave modificados")
+	instructions := fs.String("instructions", "", "Preferencias o restricciones aprendidas")
+	topicKey := fs.String("topic-key", "session/latest", "TopicKey determinístico")
+	project := fs.String("project", "", "Nombre del proyecto")
+	tags := fs.String("tags", "", "Tags adicionales")
+	global := fs.Bool("global", false, "Guardar en BD global")
+	dbPath := fs.String("db", "", "Ruta a BD personalizada")
+	asJSON := fs.Bool("json", false, "Salida en JSON")
+
+	_ = fs.Parse(args)
+
+	if *goal == "" || *accomplished == "" {
+		fmt.Fprintln(os.Stderr, "Error: --goal y --accomplished son obligatorios para el resumen de sesión.")
+		return 1
+	}
+
+	projectName := *project
+	if projectName == "" {
+		projectName = core.DetectProjectName()
+	}
+
+	s, err := getStorage(*dbPath, *global)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error conectando a BD: %v\n", err)
+		return 1
+	}
+	defer s.Close()
+
+	summaryObj := core.SessionSummary{
+		Goal:          *goal,
+		Accomplished:  *accomplished,
+		Discoveries:   *discoveries,
+		NextSteps:     *nextSteps,
+		RelevantFiles: *where,
+		Instructions:  *instructions,
+	}
+
+	saved, err := s.SaveSessionSummary(projectName, *topicKey, summaryObj, *tags)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error guardando resumen de sesión: %v\n", err)
+		return 1
+	}
+
+	if *asJSON {
+		_ = json.NewEncoder(os.Stdout).Encode(saved)
+	} else {
+		fmt.Println("📋 **Resumen de Sesión Guardado con Éxito**")
+		fmt.Printf("ID: #%d\n", saved.ID)
+		fmt.Printf("Proyecto: [%s]\n", saved.ProjectName)
+		fmt.Printf("Título: %s\n", saved.Title)
+		fmt.Printf("Topic Key: %s\n", saved.TopicKey)
+		fmt.Printf("Resumen: %s\n", saved.SummarySignature)
 	}
 
 	return 0
