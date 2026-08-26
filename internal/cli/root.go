@@ -140,13 +140,21 @@ func getStorage(customPath string, forceGlobal bool) (*storage.Storage, error) {
 	return storage.New(dbPath)
 }
 
+func prettyPath(p string) string {
+	home, err := os.UserHomeDir()
+	if err == nil && strings.HasPrefix(p, home) {
+		return "~" + p[len(home):]
+	}
+	return p
+}
+
 func handleInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	project     := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
 	noSkills    := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
 	allSkills   := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
 	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, opencode, local, copilot, hermes, all, none)")
-	// --global mantenido como alias de retrocompatibilidad (comportamiento idéntico al default)
+	// --global mantenido como alias de retrocompatibilidad
 	_ = fs.Bool("global", false, "")
 	_ = fs.Parse(args)
 
@@ -165,7 +173,6 @@ func handleInit(args []string) int {
 		s.Close()
 		fmt.Printf("✅ Cogni local inicializado en: %s\n", dbPath)
 		fmt.Printf("💡 Proyecto detectado: %s\n", core.DetectProjectName())
-		fmt.Println("💡 Las skills de IA son configuración global. Usa 'cogni init' (sin --project) para instalarlas.")
 	} else {
 		dir := core.GetGlobalCogniDir()
 		if err := os.MkdirAll(dir, 0755); err != nil {
@@ -179,10 +186,11 @@ func handleInit(args []string) int {
 			return 1
 		}
 		s.Close()
-		fmt.Printf("✅ Cogni global inicializado en: %s\n", dbPath)
 
 		if !*noSkills {
 			promptAndInstallSkills(*harnessFlag, *allSkills)
+		} else {
+			fmt.Printf("✅ Cogni global inicializado en: %s\n", prettyPath(dbPath))
 		}
 	}
 
@@ -200,25 +208,21 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 	// Intentar cargar configuración guardada previa al actualizar
 	cfg, _ := core.LoadConfig(home)
 	if harnessFlag == "" && autoAll && cfg != nil && len(cfg.SelectedHarnesses) > 0 {
-		fmt.Println("🔄 Cogni Upgrade: Actualizando arneses configurados previamente...")
 		for _, h := range cfg.SelectedHarnesses {
 			if paths, ok := harnesses[h]; ok {
 				for _, p := range paths {
 					_ = core.InstallSkill(p)
 				}
-				fmt.Printf("  -> Skill actualizada para: %s\n", h)
 			}
 		}
 
 		_ = core.InstallRules(home, cfg.SelectedHarnesses)
-		fmt.Println("📜 Reglas globales (Invariants) actualizadas.")
-
 		mcpResults := core.ConfigureHarnessMCP(home, cfg.SelectedHarnesses)
+
+		fmt.Println("🔄 Cogni Upgrade: Arneses de IA actualizados:")
+		fmt.Printf("  ✔ Arneses activos: %s\n", strings.Join(cfg.SelectedHarnesses, ", "))
 		if len(mcpResults) > 0 {
-			fmt.Println("🔌 Servidores MCP actualizados automáticamente:")
-			for harness, cfgPath := range mcpResults {
-				fmt.Printf("  -> [%s] Servidor MCP registrado en: %s\n", harness, cfgPath)
-			}
+			fmt.Printf("  ✔ Servidores MCP:  Configurados en %d destinos\n", len(mcpResults))
 		}
 		return
 	}
@@ -251,15 +255,15 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 		choice = "8"
 	} else {
 		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
-		fmt.Println("1) Gemini Antigravity (~/.gemini/config/skills/)")
-		fmt.Println("2) Cursor IDE (~/.cursor/skills/)")
-		fmt.Println("3) Claude Code / Desktop (~/.claude/skills/)")
-		fmt.Println("4) OpenCode (~/.config/opencode/skills/ & ~/.agents/skills/)")
-		fmt.Println("5) Agentes Estándar (~/.agents/skills/)")
-		fmt.Println("6) GitHub Copilot (~/.agents/skills/ & ~/.copilot/skills/)")
-		fmt.Println("7) Hermes CLI (~/.hermes/skills/)")
-		fmt.Println("8) Instalar en TODOS los entornos detectados (Recomendado)")
-		fmt.Println("9) Omitir instalación de Skill")
+		fmt.Println("  1) Gemini Antigravity    (~/.gemini/)")
+		fmt.Println("  2) Cursor IDE            (~/.cursor/)")
+		fmt.Println("  3) Claude Code / Desktop (~/.claude/)")
+		fmt.Println("  4) OpenCode              (~/.config/opencode/)")
+		fmt.Println("  5) Agentes Estándar      (~/.agents/)")
+		fmt.Println("  6) GitHub Copilot        (VS Code / Copilot)")
+		fmt.Println("  7) Hermes CLI            (~/.hermes/)")
+		fmt.Println("  8) TODOS los entornos    (Recomendado)")
+		fmt.Println("  9) Omitir skill")
 		fmt.Print("\nIngresa tu opción (1-9) [por defecto: 8]: ")
 
 		var input string
@@ -271,91 +275,67 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 	}
 
 	var selectedHarnesses []string
+	var harnessLabel string
 
 	switch choice {
 	case "1":
 		selectedHarnesses = []string{"antigravity"}
-		for _, p := range harnesses["antigravity"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Antigravity: %s\n", p)
-		}
+		harnessLabel = "Gemini Antigravity"
 	case "2":
 		selectedHarnesses = []string{"cursor"}
-		for _, p := range harnesses["cursor"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Cursor: %s\n", p)
-		}
+		harnessLabel = "Cursor IDE"
 	case "3":
 		selectedHarnesses = []string{"claude"}
-		for _, p := range harnesses["claude"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Claude: %s\n", p)
-		}
+		harnessLabel = "Claude Code / Desktop"
 	case "4":
 		selectedHarnesses = []string{"opencode"}
-		for _, p := range harnesses["opencode"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en OpenCode: %s\n", p)
-		}
+		harnessLabel = "OpenCode"
 	case "5":
 		selectedHarnesses = []string{"local"}
-		for _, p := range harnesses["local"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Agentes Estándar: %s\n", p)
-		}
+		harnessLabel = "Agentes Estándar (~/.agents/)"
 	case "6":
 		selectedHarnesses = []string{"copilot"}
-		for _, p := range harnesses["copilot"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Copilot: %s\n", p)
-		}
+		harnessLabel = "GitHub Copilot"
 	case "7":
 		selectedHarnesses = []string{"hermes"}
-		for _, p := range harnesses["hermes"] {
-			_ = core.InstallSkill(p)
-			fmt.Printf("  -> Skill instalada en Hermes: %s\n", p)
-		}
+		harnessLabel = "Hermes CLI"
 	case "8":
 		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
-		fmt.Println("🚀 Registrando Skill de Cogni en todos los arneses de IA...")
-		for name, paths := range harnesses {
-			for _, p := range paths {
-				_ = core.InstallSkill(p)
-			}
-			fmt.Printf("  -> Configurado para: %s\n", name)
-		}
+		harnessLabel = "Todos los arneses detectados"
 	case "9":
 		fmt.Println("⏭️ Instalación de Skill omitida.")
 		return
 	default:
 		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
-		fmt.Println("🚀 Opción por defecto: Registrando en todos los arneses...")
-		for name, paths := range harnesses {
+		harnessLabel = "Todos los arneses detectados"
+	}
+
+	for _, name := range selectedHarnesses {
+		if paths, ok := harnesses[name]; ok {
 			for _, p := range paths {
 				_ = core.InstallSkill(p)
 			}
-			fmt.Printf("  -> Configurado para: %s\n", name)
 		}
 	}
 
-	// Persistir la selección de arneses para futuras actualizaciones
 	_ = core.SaveConfig(home, &core.Config{SelectedHarnesses: selectedHarnesses})
-
-	fmt.Println("✨ Skills de Cogni configuradas y listas para usar con tus Agentes de IA.")
-
-	// Instalar reglas globales activas de forma automática
-	if err := core.InstallRules(home, selectedHarnesses); err == nil {
-		fmt.Println("📜 Reglas globales (Invariants) inyectadas en los directorios de Rules.")
-	}
-
-	// Configurar servidores MCP automáticamente en todos los arneses detectados
+	_ = core.InstallRules(home, selectedHarnesses)
 	mcpResults := core.ConfigureHarnessMCP(home, selectedHarnesses)
+
+	dbPath := prettyPath(filepath.Join(core.GetGlobalCogniDir(), "memory.db"))
+
+	fmt.Println("\n⚙️  Configuración completada:")
+	fmt.Printf("  ✔ Almacenamiento:   %s\n", dbPath)
+	fmt.Printf("  ✔ Skill de IA:      %s\n", harnessLabel)
+	fmt.Println("  ✔ Reglas Invariants: Inyectadas")
 	if len(mcpResults) > 0 {
-		fmt.Println("🔌 Servidores MCP configurados automáticamente:")
-		for harness, cfgPath := range mcpResults {
-			fmt.Printf("  -> [%s] Servidor MCP registrado en: %s\n", harness, cfgPath)
-		}
+		fmt.Printf("  ✔ Servidores MCP:   Configurados en %d destinos\n", len(mcpResults))
 	}
+
+	fmt.Println("\n💡 Uso rápido:")
+	fmt.Println("   cogni search \"<query>\"   Busca memorias sintéticas (FTS5)")
+	fmt.Println("   cogni save --title \"..\"  Guarda una firma de conocimiento")
+	fmt.Println("   cogni ui                 Abre el dashboard gráfico en el navegador")
 }
 
 func handleSave(args []string) int {
