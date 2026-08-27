@@ -42,21 +42,42 @@ if [[ -n $(git status --porcelain) ]]; then
     git commit -m "chore: release ${NEW_TAG}"
 fi
 
-echo "🔨 Compilando binarios locales con ldflags ${NEW_TAG}..."
+echo "🔨 Compilando binarios multiplataforma con ldflags ${NEW_TAG}..."
 mkdir -p bin
-go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${NEW_TAG}" -o bin/cogni ./cmd/cogni
 
-# Si gh CLI está disponible, podemos crear un release en GitHub con el binario
+build_binary() {
+    local os="$1"
+    local arch="$2"
+    local output="bin/cogni_${os}_${arch}"
+    echo "  • Compilando ${output}..."
+    GOOS="$os" GOARCH="$arch" go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${NEW_TAG}" -o "$output" ./cmd/cogni
+}
+
+build_binary "darwin" "arm64"
+build_binary "darwin" "amd64"
+build_binary "linux" "amd64"
+build_binary "linux" "arm64"
+
+# Crear alias local bin/cogni para la plataforma actual
+PLATFORM_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+PLATFORM_ARCH="$(uname -m)"
+case "$PLATFORM_ARCH" in
+    x86_64) PLATFORM_ARCH="amd64" ;;
+    aarch64|arm64) PLATFORM_ARCH="arm64" ;;
+esac
+cp "bin/cogni_${PLATFORM_OS}_${PLATFORM_ARCH}" bin/cogni
+
+# Si gh CLI está disponible, podemos crear un release en GitHub con los binarios
 echo "📌 Creando git tag ${NEW_TAG}..."
-git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
+git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}" 2>/dev/null || true
 
 echo "🚀 Subiendo cambios y tag a GitHub..."
 git push origin main
 git push origin "${NEW_TAG}"
 
 if command -v gh &>/dev/null; then
-    echo "📦 Generando GitHub Release y adjuntando binarios..."
-    gh release create "${NEW_TAG}" bin/cogni --title "${NEW_TAG}" --notes "Release ${NEW_TAG}" || true
+    echo "📦 Subiendo Release a GitHub y adjuntando binarios multiplataforma..."
+    gh release create "${NEW_TAG}" bin/cogni_* --title "${NEW_TAG}" --notes "Release ${NEW_TAG}" --clobber || true
 fi
 
 echo "✅ ¡Release ${NEW_TAG} publicado con éxito!"
