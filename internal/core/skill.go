@@ -223,7 +223,6 @@ func GetHarnessSkillPaths(homeDir string) map[string][]string {
 func GetHarnessMCPPaths(homeDir string) map[string][]string {
 	return map[string][]string{
 		"antigravity": {
-			filepath.Join(homeDir, ".gemini", "antigravity-ide", "mcp_config.json"),
 			filepath.Join(homeDir, ".gemini", "config", "mcp_config.json"),
 		},
 		"cursor": {
