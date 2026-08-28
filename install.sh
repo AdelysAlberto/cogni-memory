@@ -71,24 +71,28 @@ PLATFORM="$(detect_platform)"
 LATEST_RELEASE_URL="https://github.com/AdelysAlberto/cogni-memory/releases/latest/download/cogni_${PLATFORM}"
 
 if curl -fsSL --head "$LATEST_RELEASE_URL" &>/dev/null; then
-    curl -fsSL "$LATEST_RELEASE_URL" -o "$BIN_INSTALL_DIR/cogni"
-    chmod +x "$BIN_INSTALL_DIR/cogni"
+    curl -fsSL "$LATEST_RELEASE_URL" -o "$BIN_INSTALL_DIR/cogni.tmp"
+    chmod +x "$BIN_INSTALL_DIR/cogni.tmp"
+    mv -f "$BIN_INSTALL_DIR/cogni.tmp" "$BIN_INSTALL_DIR/cogni"
     echo "✔ Binario listo en ~/.local/bin/cogni"
 elif command -v go &>/dev/null; then
-    VERSION_TAG="$(git -C "$REPO_DIR" describe --tags --abbrev=0 2>/dev/null || echo "v2.0.12")"
-    (cd "$REPO_DIR" && go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${VERSION_TAG}" -o "$BIN_INSTALL_DIR/cogni" ./cmd/cogni)
-    chmod +x "$BIN_INSTALL_DIR/cogni"
+    VERSION_TAG="$(git -C "$REPO_DIR" describe --tags --abbrev=0 2>/dev/null || echo "v2.0.16")"
+    (cd "$REPO_DIR" && go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${VERSION_TAG}" -o "$BIN_INSTALL_DIR/cogni.tmp" ./cmd/cogni)
+    chmod +x "$BIN_INSTALL_DIR/cogni.tmp"
+    mv -f "$BIN_INSTALL_DIR/cogni.tmp" "$BIN_INSTALL_DIR/cogni"
     echo "✔ Binario compilado e instalado en ~/.local/bin/cogni ($VERSION_TAG)"
 elif [ -f "$REPO_DIR/bin/cogni" ]; then
-    cp "$REPO_DIR/bin/cogni" "$BIN_INSTALL_DIR/cogni"
-    chmod +x "$BIN_INSTALL_DIR/cogni"
+    cp "$REPO_DIR/bin/cogni" "$BIN_INSTALL_DIR/cogni.tmp"
+    chmod +x "$BIN_INSTALL_DIR/cogni.tmp"
+    mv -f "$BIN_INSTALL_DIR/cogni.tmp" "$BIN_INSTALL_DIR/cogni"
     echo "✔ Binario listo en ~/.local/bin/cogni"
 elif try_install_go; then
     export PATH="$PATH:/snap/bin:/usr/local/go/bin"
     if command -v go &>/dev/null; then
-        VERSION_TAG="$(git -C "$REPO_DIR" describe --tags --abbrev=0 2>/dev/null || echo "v2.0.12")"
-        (cd "$REPO_DIR" && go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${VERSION_TAG}" -o "$BIN_INSTALL_DIR/cogni" ./cmd/cogni)
-        chmod +x "$BIN_INSTALL_DIR/cogni"
+        VERSION_TAG="$(git -C "$REPO_DIR" describe --tags --abbrev=0 2>/dev/null || echo "v2.0.16")"
+        (cd "$REPO_DIR" && go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${VERSION_TAG}" -o "$BIN_INSTALL_DIR/cogni.tmp" ./cmd/cogni)
+        chmod +x "$BIN_INSTALL_DIR/cogni.tmp"
+        mv -f "$BIN_INSTALL_DIR/cogni.tmp" "$BIN_INSTALL_DIR/cogni"
         echo "✔ Binario compilado e instalado en ~/.local/bin/cogni ($VERSION_TAG)"
     else
         echo "⚠️ Go instalado pero requiere reiniciar la terminal."
