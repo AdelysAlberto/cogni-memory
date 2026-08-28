@@ -65,16 +65,24 @@ To prevent context inflation and avoid re-analyzing codebases:
 - **` + "`preference`" + `**: User preference or technical constraint learned during the session.
 - **` + "`session`" + `**: End-of-session or post-compaction milestone summaries.
 
-### 3. Structured 4-Part Summary Format (What / Why / Where / Learned)
-Every memory signature MUST follow or provide these 4 discrete high-density fields:
-- **What**: One sentence — what was done or decided.
+### 3. High-Density Synthetic Signature Format (What / Why / Where / Learned)
+Cogni is designed to eliminate context saturation by replacing 500-line file reads with High-Density Synthetic Signatures occupying under 5% of tokens:
+
+- **Topic**: Hierarchical key (` + "`<domain>/<subdomain>/<topic>`" + `, e.g., ` + "`standards/i18n/ui`" + `, ` + "`arch/auth/jwt`" + `).
+- **What**: One concise sentence — what was done or decided.
 - **Why**: Motivation or root cause.
-- **Where**: Affected files or paths.
+- **Where**: Affected relative files or paths.
 - **Learned**: Non-obvious gotchas or learnings (omit if none).
 
 *Format in signature*: ` + "`What: ... | Why: ... | Where: ... | Learned: ...`" + `
 
-### 4. Compaction & Session Lifecycle Protocol
+` + "```yaml\n# Ideal Cogni Signature Example:\nTopic: standards/i18n/ui\nWhat: Todo texto visible en JSX/TSX debe usar t('namespace:key'). Prohibido texto literal.\nWhy: Estándar global del proyecto para soporte multi-idioma (es, en, pt, fr, ar).\nWhere: src/providers/i18n/, src/modules/*, src/layouts/\nLearned: Cadenas en toast o modales también deben internacionalizarse.\n```" + `
+
+### 4. Diagnostic & Maintenance Tooling
+- **` + "`cogni stats`" + ` / ` + "`cogni_stats()`" + `**: Displays memory health, entry count, and estimated token savings metrics.
+- **` + "`cogni session_summary`" + ` / ` + "`cogni_session_summary()`" + `**: Summarizes progress, discoveries, and next steps to resume context without reloading long chat histories.
+
+### 5. Compaction & Session Lifecycle Protocol
 
 #### End of Session (` + "`cogni_session_summary`" + `)
 Before ending a session or stating "done", call ` + "`cogni_session_summary`" + ` (or ` + "`cogni session-summary`" + `) with:
@@ -90,9 +98,9 @@ If a compaction message or reset occurs:
 2. Call ` + "`cogni_context`" + ` to retrieve active project context.
 3. Only THEN proceed with your task.
 
-### 5. Deterministic Topic Keys & Automatic Upserts
+### 6. Deterministic Topic Keys & Automatic Upserts
 To prevent duplicate records:
-- Format: ` + "`<domain>/<subdomain>/<topic>`" + ` (ej. ` + "`arch/auth/jwt`" + `, ` + "`sdd/cart/spec`" + `, ` + "`session/latest`" + `).
+- Format: ` + "`<domain>/<subdomain>/<topic>`" + ` (ej. ` + "`arch/auth/jwt`" + `, ` + "`standards/i18n/ui`" + `, ` + "`session/latest`" + `).
 - When a ` + "`--topic-key`" + ` already exists, ` + "`cogni save`" + ` automatically updates (**upserts**) the record.
 
 ---
@@ -106,7 +114,7 @@ To prevent duplicate records:
 - ` + "`cogni_get(id, topic_key, project)`" + `: Full content hydration (Phase 2).
 - ` + "`cogni_save(title, summary, what, why, where, learned, category, tags, topic_key, project, global)`" + `: Structured save/upsert.
 - ` + "`cogni_update(id, summary, title, category, tags, topic_key)`" + `: Direct update by ID.
-- ` + "`cogni_stats()`" + `: Memory usage and token metrics.
+- ` + "`cogni_stats()`" + `: Memory usage, health, and token metrics.
 
 ### CLI Commands:
 ` + "```bash\n# 1. Quick active context bootstrapping\ncogni context\n\n# 2. Save structured memory with discrete fields\ncogni save \\\n  --topic-key \"arch/auth/jwt\" \\\n  --title \"JWT Refresh Token Rotation\" \\\n  --what \"Implemented refresh token rotation with Redis blacklist\" \\\n  --why \"Mitigates replay attacks after security audit\" \\\n  --where \"src/auth/jwt.go, src/middleware/auth.go\" \\\n  --learned \"Redis TTL automatically manages expired blacklist keys\" \\\n  --category \"architecture\" \\\n  --tags \"auth,jwt,security\"\n\n# 3. Save end-of-session or post-compaction summary\ncogni session-summary \\\n  --goal \"Implement JWT Auth\" \\\n  --accomplished \"Created tokens endpoints and migrations\" \\\n  --where \"src/auth/jwt.go\"\n\n# 4. Search memories (Compact 1-line preview)\ncogni search --query \"jwt\"\n\n# 5. Retrieve full memory content (Phase 2)\ncogni get arch/auth/jwt\n```" + `

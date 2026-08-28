@@ -159,17 +159,27 @@ El agente debe guardar memoria INMEDIATAMENTE tras:
 * 👤 **preference**: Restricción o preferencia explicada por el usuario.
 * 📋 **session**: Resumen de sesión o hito alcanzado al cerrar sesión o tras compactar contexto.
 
-### 2. Estructura Sintética Obligatoria (`--summary` o flags discretos)
+### 2. Estructura de Firma Sintética de Alta Densidad (<5% Tokens)
 
-Puedes usar la firma en bloque o los flags individuales (`--what`, `--why`, `--where`, `--learned`):
+Cogni reemplaza relecturas masivas de código por **Firmas Sintéticas de Alta Densidad**:
 
-```text
-What: <Qué se hizo en 1 oración> | Why: <Motivación o causa raíz> | Where: <Archivos/rutas clave> | Learned: <Gotchas o hallazgos>
+```yaml
+Topic: <domain>/<subdomain>/<topic> (ej: standards/i18n/ui)
+What: <Qué se hizo o decidió en 1 oración corta>
+Why: <Motivación o causa raíz técnica>
+Where: <Archivos o rutas clave afectadas>
+Learned: <Gotchas o hallazgos no obvios>
 ```
 
-### 3. Protocolo de Compactación y Cierre de Sesión
+Format de firma sintética unificada (`--summary` o flags discretos `--what`, `--why`, `--where`, `--learned`):
+```text
+What: ... | Why: ... | Where: ... | Learned: ...
+```
 
-* **Al cerrar sesión**: Ejecuta `cogni session-summary --goal "..." --accomplished "..."` para que el siguiente chat no arranque a ciegas.
+### 3. Herramientas de Diagnóstico y Ciclo de Vida de Sesión
+
+* **`cogni stats`**: Muestra métricas de salud de memoria, número de registros y tokens ahorrados.
+* **`cogni session-summary`**: Guarda los avances y descubrimientos del proyecto al cerrar sesión o compactar contexto para reanudar el trabajo en < 100 tokens.
 * **Tras compactación de contexto (`FIRST ACTION REQUIRED`)**:
   1. Llama inmediatamente a `cogni session-summary` con el resumen compactado.
   2. Llama a `cogni context` para recuperar el estado activo.
