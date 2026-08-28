@@ -77,7 +77,7 @@ git push origin "${NEW_TAG}"
 
 if command -v gh &>/dev/null; then
     echo "📦 Subiendo Release a GitHub y adjuntando binarios multiplataforma..."
-    gh release create "${NEW_TAG}" bin/cogni_* --title "${NEW_TAG}" --notes "Release ${NEW_TAG}" --clobber || true
+    gh release create "${NEW_TAG}" bin/cogni_* --title "${NEW_TAG}" --notes "Release ${NEW_TAG}" || true
 fi
 
 echo "✅ ¡Release ${NEW_TAG} publicado con éxito!"
