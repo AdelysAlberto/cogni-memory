@@ -34,6 +34,22 @@ type Error struct {
 	Data    any    `json:"data,omitempty"`
 }
 
+type FlexTags string
+
+func (ft *FlexTags) UnmarshalJSON(data []byte) error {
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*ft = FlexTags(str)
+		return nil
+	}
+	var arr []string
+	if err := json.Unmarshal(data, &arr); err == nil {
+		*ft = FlexTags(strings.Join(arr, ","))
+		return nil
+	}
+	return nil
+}
+
 type Tool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
@@ -530,17 +546,17 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 
 	case "cogni_save":
 		var args struct {
-			Title    string `json:"title"`
-			Summary  string `json:"summary"`
-			What     string `json:"what"`
-			Why      string `json:"why"`
-			Where    string `json:"where"`
-			Learned  string `json:"learned"`
-			Category string `json:"category"`
-			Tags     string `json:"tags"`
-			TopicKey string `json:"topic_key"`
-			Project  string `json:"project"`
-			Global   bool   `json:"global"`
+			Title    string   `json:"title"`
+			Summary  string   `json:"summary"`
+			What     string   `json:"what"`
+			Why      string   `json:"why"`
+			Where    string   `json:"where"`
+			Learned  string   `json:"learned"`
+			Category string   `json:"category"`
+			Tags     FlexTags `json:"tags"`
+			TopicKey string   `json:"topic_key"`
+			Project  string   `json:"project"`
+			Global   bool     `json:"global"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
 			return "Error parseando argumentos: " + err.Error(), true
@@ -583,10 +599,25 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if targetStorage == nil {
+			targetStorage = globalStorage
+		}
+
+		if targetStorage == nil {
+			// Fallback de emergencia a la base de datos global de usuario
+			homeDir, _ := os.UserHomeDir()
+			if homeDir != "" {
+				globalDir := filepath.Join(homeDir, ".cogni")
+				_ = os.MkdirAll(globalDir, 0755)
+				globalPath := filepath.Join(globalDir, "memory.db")
+				targetStorage, _ = storage.NewWithSource(globalPath, "global")
+			}
+		}
+
+		if targetStorage == nil {
 			return "Error: No se pudo inicializar el almacenamiento.", true
 		}
 
-		formattedTags := core.FormatTags(args.Tags, project)
+		formattedTags := core.FormatTags(string(args.Tags), project)
 		mem := &core.Memory{
 			ProjectName:      project,
 			Category:         args.Category,
