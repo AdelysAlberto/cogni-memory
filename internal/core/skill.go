@@ -242,7 +242,8 @@ func GetHarnessMCPPaths(homeDir string) map[string][]string {
 			filepath.Join(homeDir, ".claude.json"),
 		},
 		"opencode": {
-			filepath.Join(homeDir, ".config", "opencode", "mcp.json"),
+			filepath.Join(homeDir, ".config", "opencode", "opencode.json"),
+			filepath.Join(homeDir, ".config", "opencode", "opencode.jsonc"),
 		},
 		"hermes": {
 			filepath.Join(homeDir, ".hermes", "mcp.json"),
@@ -276,6 +277,7 @@ func ConfigureHarnessMCP(homeDir string, allowedHarnesses []string) map[string]s
 	cogniEntry := map[string]any{
 		"command": cogniBin,
 		"args":    []string{"mcp"},
+		"type":    "stdio",
 	}
 
 	for harness, paths := range mcpConfigs {
@@ -322,6 +324,13 @@ func injectMCPServer(filePath string, serverName string, serverConfig map[string
 		root = make(map[string]any)
 	}
 
+	// OpenCode usa formato especial: { "mcp": { "servers": { "name": {...} } } }
+	isOpenCode := filepath.Base(filePath) == "opencode.json" || filepath.Base(filePath) == "opencode.jsonc"
+	if isOpenCode {
+		return injectOpenCodeMCP(filePath, root, serverName, serverConfig)
+	}
+
+	// Formato estandar (Claude, Cursor, Gemini): { "mcpServers": { "name": {...} } }
 	var servers map[string]any
 	if existing, ok := root["mcpServers"].(map[string]any); ok && existing != nil {
 		servers = existing
@@ -331,6 +340,63 @@ func injectMCPServer(filePath string, serverName string, serverConfig map[string
 
 	servers[serverName] = serverConfig
 	root["mcpServers"] = servers
+
+	_ = os.MkdirAll(filepath.Dir(filePath), 0755)
+
+	data, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(filePath, append(data, '\n'), 0644)
+}
+
+func injectOpenCodeMCP(filePath string, root map[string]any, serverName string, serverConfig map[string]any) error {
+	// Asegurar estructura { "mcp": { "servers": {...} } }
+	var mcpObj map[string]any
+	if existing, ok := root["mcp"].(map[string]any); ok && existing != nil {
+		mcpObj = existing
+	} else {
+		mcpObj = make(map[string]any)
+	}
+
+	var servers map[string]any
+	if existing, ok := mcpObj["servers"].(map[string]any); ok && existing != nil {
+		servers = existing
+	} else {
+		servers = make(map[string]any)
+		// Migrar formato V1 (servidores directamente bajo mcp) a V2 (mcp.servers)
+		for key, val := range mcpObj {
+			if key == "servers" {
+				continue
+			}
+			// Si parece un servidor MCP (tiene "command" o "type" o "url")
+			if serverVal, ok := val.(map[string]any); ok {
+				if _, hasCommand := serverVal["command"]; hasCommand {
+					if _, hasType := serverVal["type"]; hasType {
+						servers[key] = val
+						delete(mcpObj, key)
+					}
+				}
+			}
+		}
+	}
+
+	// Convertir formato estandar a formato OpenCode:
+	// De: { "command": "cogni", "args": ["mcp"] }
+	// A:  { "type": "local", "command": ["cogni", "mcp"], "enabled": true }
+	cogniCmd, _ := serverConfig["command"].(string)
+	cogniArgs, _ := serverConfig["args"].([]string)
+
+	openCodeServer := map[string]any{
+		"type":    "local",
+		"command": append([]string{cogniCmd}, cogniArgs...),
+		"enabled": true,
+	}
+
+	servers[serverName] = openCodeServer
+	mcpObj["servers"] = servers
+	root["mcp"] = mcpObj
 
 	_ = os.MkdirAll(filepath.Dir(filePath), 0755)
 

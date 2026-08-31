@@ -116,9 +116,109 @@ make install
 * Crea/usa `~/.cogni/` para datos locales.
 * Puede usar `~/.cogni-src/` como caché de fuente.
 * Copia la skill y reglas en carpetas de los arneses seleccionados.
+* **Configura automáticamente el servidor MCP** en los arneses compatibles (OpenCode, Cursor, Claude, Gemini, Hermes).
 * En Copilot VS Code, puede crear `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux).
 
 No reemplaza archivos del proyecto actual ni requiere privilegios root para el flujo normal (salvo intentos opcionales de instalar Go si no existe).
+
+---
+
+## 🔌 Integración MCP (Model Context Protocol)
+
+Cogni incluye un servidor MCP nativo que permite a los agentes de IA interactuar con la memoria mediante herramientas estructuradas, sin depender exclusivamente de la CLI.
+
+### Configuración Automática por Arnés
+
+Al ejecutar `cogni init` e seleccionar tu entorno, Cogni inyecta automáticamente la configuración MCP en el archivo correspondiente:
+
+| Arnés | Archivo de Configuración MCP |
+| :--- | :--- |
+| **OpenCode** | `~/.config/opencode/opencode.json` |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
+| **Claude Code CLI** | `~/.claude.json` |
+| **Cursor IDE** | `~/.cursor/mcp.json` |
+| **Gemini Antigravity** | `~/.gemini/config/mcp_config.json` |
+| **Hermes CLI** | `~/.hermes/mcp.json` |
+
+### Formato Generado para OpenCode
+
+Para **OpenCode**, Cogni genera automáticamente la estructura correcta bajo `mcp.servers`:
+
+```jsonc
+// ~/.config/opencode/opencode.json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "cogni": {
+        "type": "local",
+        "command": ["/Users/tu-usuario/.local/bin/cogni", "mcp"],
+        "enabled": true
+      }
+    }
+  }
+}
+```
+
+> **Nota**: OpenCode usa el formato `mcp.servers` (V2), **no** el formato `mcpServers` usado por Claude/Cursor. El instalador de Cogni detecta automáticamente el arnés y genera el formato correcto.
+
+### Formato Generado para Claude
+
+**Claude Desktop** (aplicación gráfica):
+```jsonc
+// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
+{
+  "mcpServers": {
+    "cogni": {
+      "type": "stdio",
+      "command": "/Users/tu-usuario/.local/bin/cogni",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**Claude Code** (CLI):
+```jsonc
+// ~/.claude.json
+{
+  "mcpServers": {
+    "cogni": {
+      "type": "stdio",
+      "command": "/Users/tu-usuario/.local/bin/cogni",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+> **Nota importante**: Claude Code también soporta configuración a nivel de proyecto con `.mcp.json` en la raíz del proyecto. Para configuración compartida con el equipo, ejecuta `claude mcp add cogni --scope project` después de instalar Cogni.
+
+### Herramientas MCP Disponibles
+
+Una vez configurado, el agente tendrá acceso a estas herramientas:
+
+| Herramienta | Descripción |
+| :--- | :--- |
+| `cogni_search` | Búsqueda compacta de memorias (FTS5) |
+| `cogni_get` | Recuperación completa de una memoria por ID o TopicKey |
+| `cogni_save` | Guarda o actualiza (upsert) una firma de memoria |
+| `cogni_update` | Actualiza una memoria existente por ID |
+| `cogni_context` | Contexto activo reciente del proyecto |
+| `cogni_session_summary` | Guarda resumen de sesión |
+| `cogni_stats` | Métricas de uso y tokens ahorrados |
+
+### Verificación Manual
+
+Para verificar que el servidor MCP está funcionando:
+
+```bash
+# Iniciar el servidor MCP manualmente (para debugging)
+cogni mcp
+
+# Verificar que el binario está en PATH
+which cogni
+```
 
 ---
 
