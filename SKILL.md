@@ -1,6 +1,6 @@
 ---
 name: cogni
-description: Autonomous local memory system to query and store synthetic semantic signatures in SQLite, reducing token consumption by up to 95% across AI Agent environments (Antigravity, Cursor, Claude, Copilot, OpenCode, Hermes).
+description: Autonomous local memory system to query and store synthetic semantic signatures in SQLite, reducing token consumption by up to 95% across AI Agent environments (Antigravity, Cursor, Claude, Copilot, OpenCode, Hermes, Codex).
 ---
 
 # 🧠 Cogni Skill (Autonomous AI Agent Memory System)

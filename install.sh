@@ -115,22 +115,23 @@ echo "  4) OpenCode              (~/.config/opencode/)"
 echo "  5) Agentes Estándar      (~/.agents/)"
 echo "  6) GitHub Copilot        (VS Code / Copilot Chat)"
 echo "  7) Hermes CLI            (~/.hermes/)"
-echo "  8) TODOS los entornos    (Recomendado)"
-echo "  9) Omitir skill"
+echo "  8) Codex CLI             (~/.codex/)"
+echo "  9) TODOS los entornos    (Recomendado)"
+echo " 10) Omitir skill"
 echo ""
 
 HARNESS_CHOICE="${HARNESS_CHOICE:-}"
 if [ -z "$HARNESS_CHOICE" ]; then
     if [ -t 0 ]; then
-        read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE || true
+        read -p "Ingresa tu opción (1-10) [por defecto: 9]: " HARNESS_CHOICE || true
     elif [ -r /dev/tty ]; then
-        read -p "Ingresa tu opción (1-9) [por defecto: 8]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
+        read -p "Ingresa tu opción (1-10) [por defecto: 9]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
     fi
 fi
 
 if [ -z "$HARNESS_CHOICE" ]; then
-    echo "ℹ️ Modo no interactivo detectado: Seleccionando opción 8 (TODOS por defecto)..."
-    HARNESS_CHOICE=8
+    echo "ℹ️ Modo no interactivo detectado: Seleccionando opción 9 (TODOS por defecto)..."
+    HARNESS_CHOICE=9
 fi
 
 install_copilot_instructions() {
@@ -174,8 +175,9 @@ case $HARNESS_CHOICE in
     5) HARNESS_FLAG="local" ;;
     6) HARNESS_FLAG="copilot" ;;
     7) HARNESS_FLAG="hermes" ;;
-    8) HARNESS_FLAG="all" ;;
-    9) HARNESS_FLAG="none" ;;
+    8) HARNESS_FLAG="codex" ;;
+    9) HARNESS_FLAG="all" ;;
+    10) HARNESS_FLAG="none" ;;
     *) HARNESS_FLAG="all" ;;
 esac
 

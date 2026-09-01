@@ -24,7 +24,7 @@
 
 En lugar de releer contexto crudo en cada tarea, el agente consulta una memoria sintética en SQLite (local por proyecto y opcionalmente global). El objetivo práctico es reducir repetición, mantener continuidad y evitar perder acuerdos técnicos.
 
-Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **OpenCode**, **Hermes CLI** y cualquier flujo basado en CLI/IDE que pueda ejecutar comandos.
+Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **OpenCode**, **Hermes CLI**, **OpenAI Codex CLI** y cualquier flujo basado en CLI/IDE que pueda ejecutar comandos.
 
 ---
 
@@ -69,7 +69,7 @@ Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
-*El script detectará automáticamente los arneses de IA instalados (`.gemini`, `.cursor`, `.claude`, `.agents`, `.copilot`, `.opencode`, `.hermes`) y registrará la skill de Cogni.*
+*El script detectará automáticamente los arneses de IA instalados (`.gemini`, `.cursor`, `.claude`, `.agents`, `.copilot`, `.opencode`, `.hermes`, `.codex`) y registrará la skill de Cogni.*
 
 *Para GitHub Copilot en VS Code, además de la skill, el instalador crea una instrucción global en `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux) o `~/Library/Application Support/Code/User/prompts/cogni-copilot.instructions.md` (macOS) para reforzar búsqueda/guardado obligatorio cuando el CLI `cogni` está disponible.*
 
@@ -116,7 +116,7 @@ make install
 * Crea/usa `~/.cogni/` para datos locales.
 * Puede usar `~/.cogni-src/` como caché de fuente.
 * Copia la skill y reglas en carpetas de los arneses seleccionados.
-* **Configura automáticamente el servidor MCP** en los arneses compatibles (OpenCode, Cursor, Claude, Gemini, Hermes).
+* **Configura automáticamente el servidor MCP** en los arneses compatibles (OpenCode, Cursor, Claude, Gemini, Hermes, Codex).
 * En Copilot VS Code, puede crear `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux).
 
 No reemplaza archivos del proyecto actual ni requiere privilegios root para el flujo normal (salvo intentos opcionales de instalar Go si no existe).
@@ -139,6 +139,7 @@ Al ejecutar `cogni init` e seleccionar tu entorno, Cogni inyecta automáticament
 | **Cursor IDE** | `~/.cursor/mcp.json` |
 | **Gemini Antigravity** | `~/.gemini/config/mcp_config.json` |
 | **Hermes CLI** | `~/.hermes/mcp.json` |
+| **Codex CLI** | `~/.codex/config.toml` |
 
 ### Formato Generado para OpenCode
 
@@ -193,6 +194,26 @@ Para **OpenCode**, Cogni genera automáticamente la estructura correcta bajo `mc
 ```
 
 > **Nota importante**: Claude Code también soporta configuración a nivel de proyecto con `.mcp.json` en la raíz del proyecto. Para configuración compartida con el equipo, ejecuta `claude mcp add cogni --scope project` después de instalar Cogni.
+
+### Formato Generado para Codex CLI
+
+Codex CLI lee la configuración de `~/.codex/config.toml` (o `<proyecto>/.codex/config.toml` para overrides del proyecto) y registra los servidores MCP bajo la tabla `[mcp_servers]`. Cogni preserva el resto de tus claves existentes (modelo, profiles, flags, etc.) y solo hace upsert de la entrada `[mcp_servers.cogni]`:
+
+```toml
+# ~/.codex/config.toml
+mcp_oauth_credentials_store = "auto"
+
+[mcp_servers]
+
+[mcp_servers.cogni]
+command = "/Users/tu-usuario/.local/bin/cogni"
+args = ["mcp"]
+enabled = true
+```
+
+> **Nota importante**: Codex CLI **no usa** el formato `mcpServers` (camelCase) ni el wrapping `mcp.servers` de OpenCode. La sección debe llamarse `[mcp_servers]` (snake_case). El instalador de Cogni detecta el archivo `config.toml` dentro de `~/.codex/` y aplica automáticamente el formato correcto.
+
+Para configuración compartida con tu equipo, también puedes versionar `<proyecto>/.codex/config.toml` (sólo se carga en proyectos confiables) con el mismo bloque `[mcp_servers.cogni]`.
 
 ### Herramientas MCP Disponibles
 

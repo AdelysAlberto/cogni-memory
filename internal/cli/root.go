@@ -150,10 +150,10 @@ func prettyPath(p string) string {
 
 func handleInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	project     := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
-	noSkills    := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
-	allSkills   := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
-	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, opencode, local, copilot, hermes, all, none)")
+	project := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
+	noSkills := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
+	allSkills := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
+	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, opencode, local, copilot, hermes, codex, all, none)")
 	// --global mantenido como alias de retrocompatibilidad
 	_ = fs.Bool("global", false, "")
 	_ = fs.Parse(args)
@@ -244,15 +244,17 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 			choice = "6"
 		case "hermes", "7":
 			choice = "7"
-		case "all", "8":
+		case "codex", "8":
 			choice = "8"
-		case "none", "9":
+		case "all", "9":
 			choice = "9"
+		case "none", "10":
+			choice = "10"
 		default:
 			choice = harnessFlag
 		}
 	} else if autoAll {
-		choice = "8"
+		choice = "9"
 	} else {
 		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
 		fmt.Println("  1) Gemini Antigravity    (~/.gemini/)")
@@ -262,15 +264,16 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 		fmt.Println("  5) Agentes Estándar      (~/.agents/)")
 		fmt.Println("  6) GitHub Copilot        (VS Code / Copilot)")
 		fmt.Println("  7) Hermes CLI            (~/.hermes/)")
-		fmt.Println("  8) TODOS los entornos    (Recomendado)")
-		fmt.Println("  9) Omitir skill")
-		fmt.Print("\nIngresa tu opción (1-9) [por defecto: 8]: ")
+		fmt.Println("  8) Codex CLI             (~/.codex/)")
+		fmt.Println("  9) TODOS los entornos    (Recomendado)")
+		fmt.Println(" 10) Omitir skill")
+		fmt.Print("\nIngresa tu opción (1-10) [por defecto: 9]: ")
 
 		var input string
 		_, _ = fmt.Scanln(&input)
 		choice = strings.TrimSpace(input)
 		if choice == "" {
-			choice = "8"
+			choice = "9"
 		}
 	}
 
@@ -300,13 +303,16 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 		selectedHarnesses = []string{"hermes"}
 		harnessLabel = "Hermes CLI"
 	case "8":
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
-		harnessLabel = "Todos los arneses detectados"
+		selectedHarnesses = []string{"codex"}
+		harnessLabel = "Codex CLI"
 	case "9":
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes", "codex"}
+		harnessLabel = "Todos los arneses detectados"
+	case "10":
 		fmt.Println("⏭️ Instalación de Skill omitida.")
 		return
 	default:
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes"}
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes", "codex"}
 		harnessLabel = "Todos los arneses detectados"
 	}
 
@@ -1114,6 +1120,7 @@ func handleUninstall(args []string) int {
 		filepath.Join(home, ".agents", "skills", "cogni"),
 		filepath.Join(home, ".copilot", "skills", "cogni"),
 		filepath.Join(home, ".hermes", "skills", "cogni"),
+		filepath.Join(home, ".codex", "skills", "cogni"),
 	}
 
 	for _, p := range skillPaths {
@@ -1137,6 +1144,18 @@ func handleUninstall(args []string) int {
 		if _, err := os.Stat(p); err == nil {
 			_ = os.Remove(p)
 			fmt.Printf("  -> Instrucción Copilot eliminada: %s\n", p)
+		}
+	}
+
+	// 2.2 Remove Codex MCP entry from ~/.codex/config.toml (preserving other settings)
+	codexMCPPaths := []string{
+		filepath.Join(home, ".codex", "config.toml"),
+	}
+	for _, p := range codexMCPPaths {
+		if _, err := os.Stat(p); err == nil {
+			if err := core.RemoveCodexMCPServer(p, "cogni"); err == nil {
+				fmt.Printf("  -> MCP Codex eliminado: %s\n", p)
+			}
 		}
 	}
 

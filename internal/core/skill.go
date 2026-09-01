@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"github.com/BurntSushi/toml"
 )
 
 // SkillContent embeds the canonical Cogni skill definition
 const SkillContent = `---
 name: cogni
-description: Autonomous local memory system to query and store synthetic semantic signatures in SQLite, reducing token consumption by up to 95% across AI Agent environments (Antigravity, Cursor, Claude, Copilot, OpenCode, Hermes).
+description: Autonomous local memory system to query and store synthetic semantic signatures in SQLite, reducing token consumption by up to 95% across AI Agent environments (Antigravity, Cursor, Claude, Copilot, OpenCode, Hermes, Codex).
 ---
 
 # 🧠 Cogni Skill (Autonomous AI Agent Memory System)
@@ -224,6 +226,9 @@ func GetHarnessSkillPaths(homeDir string) map[string][]string {
 		"hermes": {
 			filepath.Join(homeDir, ".hermes", "skills"),
 		},
+		"codex": {
+			filepath.Join(homeDir, ".agents", "skills"),
+		},
 	}
 }
 
@@ -247,6 +252,9 @@ func GetHarnessMCPPaths(homeDir string) map[string][]string {
 		},
 		"hermes": {
 			filepath.Join(homeDir, ".hermes", "mcp.json"),
+		},
+		"codex": {
+			filepath.Join(homeDir, ".codex", "config.toml"),
 		},
 	}
 }
@@ -325,9 +333,18 @@ func injectMCPServer(filePath string, serverName string, serverConfig map[string
 	}
 
 	// OpenCode usa formato especial: { "mcp": { "servers": { "name": {...} } } }
-	isOpenCode := filepath.Base(filePath) == "opencode.json" || filepath.Base(filePath) == "opencode.jsonc"
+	baseName := filepath.Base(filePath)
+	isOpenCode := baseName == "opencode.json" || baseName == "opencode.jsonc"
 	if isOpenCode {
 		return injectOpenCodeMCP(filePath, root, serverName, serverConfig)
+	}
+
+	// Codex CLI usa TOML: [mcp_servers.<name>] con command + args
+	isCodex := baseName == "config.toml" && filepath.Base(filepath.Dir(filePath)) == ".codex"
+	if isCodex {
+		cogniCmd, _ := serverConfig["command"].(string)
+		cogniArgs, _ := serverConfig["args"].([]string)
+		return injectCodexMCP(filePath, serverName, cogniCmd, cogniArgs)
 	}
 
 	// Formato estandar (Claude, Cursor, Gemini): { "mcpServers": { "name": {...} } }
@@ -406,4 +423,107 @@ func injectOpenCodeMCP(filePath string, root map[string]any, serverName string, 
 	}
 
 	return os.WriteFile(filePath, append(data, '\n'), 0644)
+}
+
+// injectCodexMCP escribe/actualiza la sección [mcp_servers.cogni] en un archivo
+// TOML de configuración de Codex CLI sin destruir las demás claves del archivo.
+//
+// Si la sección ya existe, se reemplaza su bloque (upsert). Si la sección
+// [mcp_servers] no existe, se agrega al final respetando las claves previas.
+func injectCodexMCP(filePath string, serverName string, command string, args []string) error {
+	if command == "" {
+		command = "cogni"
+	}
+	if args == nil {
+		args = []string{"mcp"}
+	}
+
+	// 1. Parsear el archivo TOML existente en un mapa genérico.
+	var root map[string]any
+	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
+		if _, err := toml.Decode(string(data), &root); err != nil {
+			// Si no se puede parsear, empezar desde cero preservando un backup lógico
+			root = make(map[string]any)
+		}
+	}
+	if root == nil {
+		root = make(map[string]any)
+	}
+
+	// 2. Obtener/crear la tabla [mcp_servers].
+	mcpServers, ok := root["mcp_servers"].(map[string]any)
+	if !ok || mcpServers == nil {
+		mcpServers = make(map[string]any)
+	}
+
+	// 3. Upsert del servidor específico.
+	mcpServers[serverName] = map[string]any{
+		"command": command,
+		"args":    args,
+		"enabled": true,
+	}
+	root["mcp_servers"] = mcpServers
+
+	// 4. Serializar preservando el orden natural de Go map (alfabético).
+	//    En Codex no se garantiza el orden de las claves TOML, pero
+	//    serializar de forma estable evita diffs espurios entre ejecuciones.
+	_ = os.MkdirAll(filepath.Dir(filePath), 0755)
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	encoder := toml.NewEncoder(f)
+	if err := encoder.Encode(root); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// RemoveCodexMCPServer elimina la entrada [mcp_servers.<serverName>] de un
+// archivo TOML de Codex CLI. Si la tabla [mcp_servers] queda vacía, también
+// se elimina. Si el archivo no existe, no hace nada.
+func RemoveCodexMCPServer(filePath string, serverName string) error {
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		return nil
+	}
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	var root map[string]any
+	if len(data) > 0 {
+		if _, err := toml.Decode(string(data), &root); err != nil {
+			return err
+		}
+	}
+	if root == nil {
+		return nil
+	}
+
+	mcpServers, ok := root["mcp_servers"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	delete(mcpServers, serverName)
+	if len(mcpServers) == 0 {
+		delete(root, "mcp_servers")
+	} else {
+		root["mcp_servers"] = mcpServers
+	}
+
+	f, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	encoder := toml.NewEncoder(f)
+	return encoder.Encode(root)
 }
