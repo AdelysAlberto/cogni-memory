@@ -18,7 +18,7 @@
 
 ---
 
-## 📌 Visión General
+## Visión General
 
 **Cogni** es una CLI para que un agente guarde y recupere decisiones técnicas de forma persistente entre sesiones.
 
@@ -28,7 +28,7 @@ Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **
 
 ---
 
-## ✅ Qué Resuelve
+## Qué Resuelve
 
 * Evita repetir descubrimientos técnicos ya resueltos en sesiones anteriores.
 * Reduce lecturas largas de archivos cuando la pregunta ya tiene antecedente.
@@ -37,7 +37,7 @@ Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **
 
 ---
 
-## 🚀 Contexto Crudo vs. Memoria Sintética
+## Contexto Crudo vs. Memoria Sintética
 
 > Nota: los valores son rangos orientativos observados en uso real y dependen del proyecto, del modelo y del arnés.
 
@@ -52,16 +52,16 @@ Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **
 
 ## ⚡ Características Principales
 
-* 🚀 **Binario Nativo en Go**: sin runtime de Node o Python para ejecutar la CLI.
-* 🗄️ **Local-First**: memoria por proyecto en `.cogni/memory.db` y capa global opcional en `~/.cogni/memory.db`.
-* 🔍 **Búsqueda FTS5**: búsqueda full-text por título, categoría, tags y resumen.
-* 🖥️ **UI Embebida**: inspección visual de memorias desde `cogni ui`.
-* 🏷️ **Taxonomía de Tags**: reduce ambigüedad y facilita recuperación consistente.
-* 🤖 **Convención Operativa**: define cuándo buscar y cuándo guardar para evitar olvidos del agente.
+* **Binario Nativo en Go**: sin runtime de Node o Python para ejecutar la CLI.
+* **Local-First**: memoria por proyecto en `.cogni/memory.db` y capa global opcional en `~/.cogni/memory.db`.
+* **Búsqueda FTS5**: búsqueda full-text por título, categoría, tags y resumen.
+* **UI Embebida**: inspección visual de memorias desde `cogni ui`.
+* **Taxonomía de Tags**: reduce ambigüedad y facilita recuperación consistente.
+* **Convención Operativa**: define cuándo buscar y cuándo guardar para evitar olvidos del agente.
 
 ---
 
-## 🛠️ Instalación Rápida
+## Instalación Rápida
 
 ### 1. Vía Script de Instalación Universal (Recomendado)
 
@@ -85,7 +85,7 @@ make install
 
 ---
 
-## 🔐 Por Qué Instalar el Binario (Para Escépticos y Seguridad)
+## Por Qué Instalar el Binario (Para Escépticos y Seguridad)
 
 Instalar el binario no es solo comodidad; también es control operativo:
 
@@ -123,7 +123,7 @@ No reemplaza archivos del proyecto actual ni requiere privilegios root para el f
 
 ---
 
-## 🔌 Integración MCP (Model Context Protocol)
+## Integración MCP (Model Context Protocol)
 
 Cogni incluye un servidor MCP nativo que permite a los agentes de IA interactuar con la memoria mediante herramientas estructuradas, sin depender exclusivamente de la CLI.
 
@@ -166,6 +166,7 @@ Para **OpenCode**, Cogni genera automáticamente la estructura correcta bajo `mc
 ### Formato Generado para Claude
 
 **Claude Desktop** (aplicación gráfica):
+
 ```jsonc
 // ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
 {
@@ -180,6 +181,7 @@ Para **OpenCode**, Cogni genera automáticamente la estructura correcta bajo `mc
 ```
 
 **Claude Code** (CLI):
+
 ```jsonc
 // ~/.claude.json
 {
@@ -243,7 +245,7 @@ which cogni
 
 ---
 
-## 🔄 Flujo Operativo del Agente
+## Flujo Operativo del Agente
 
 ```text
                ┌──────────────────────────────────────────────┐
@@ -259,12 +261,12 @@ which cogni
                 [ SÍ ]                                 [ NO ]
     Recupera firma semántica              Diseña solución técnica,
      y notifica en chat:                  ejecuta cambio y guarda:
-   🧠 Memoria Recuperada                  cogni save 💾
+   Memoria Recuperada                  cogni save 
 ```
 
 ---
 
-## 🧠 Directivas y Disparadores Obligatorios (Skill Standard)
+## Directivas y Disparadores Obligatorios (Skill Standard)
 
 Todo agente integrado con Cogni sigue el estándar **WHEN TO SAVE / WHEN TO SEARCH**:
 
@@ -272,13 +274,13 @@ Todo agente integrado con Cogni sigue el estándar **WHEN TO SAVE / WHEN TO SEAR
 
 El agente debe guardar memoria INMEDIATAMENTE tras:
 
-* 🐛 **bugfix**: Solución a un error o bug no trivial.
-* 📐 **architecture / decision**: Elección de librerías, modelo de datos o diseño de sistema.
-* 💡 **discovery**: Descubrimiento no obvio sobre el comportamiento del sistema.
-* ⚙️ **config**: Setup de entorno, herramientas o scripts.
-* 🎨 **pattern**: Convención de naming, estructura de archivos o estándar técnico.
-* 👤 **preference**: Restricción o preferencia explicada por el usuario.
-* 📋 **session**: Resumen de sesión o hito alcanzado al cerrar sesión o tras compactar contexto.
+* **bugfix**: Solución a un error o bug no trivial.
+* **architecture / decision**: Elección de librerías, modelo de datos o diseño de sistema.
+* **discovery**: Descubrimiento no obvio sobre el comportamiento del sistema.
+* **config**: Setup de entorno, herramientas o scripts.
+* **pattern**: Convención de naming, estructura de archivos o estándar técnico.
+* **preference**: Restricción o preferencia explicada por el usuario.
+* **session**: Resumen de sesión o hito alcanzado al cerrar sesión o tras compactar contexto.
 
 ### 2. Estructura de Firma Sintética de Alta Densidad (<5% Tokens)
 
@@ -293,6 +295,7 @@ Learned: <Gotchas o hallazgos no obvios>
 ```
 
 Format de firma sintética unificada (`--summary` o flags discretos `--what`, `--why`, `--where`, `--learned`):
+
 ```text
 What: ... | Why: ... | Where: ... | Learned: ...
 ```
@@ -313,7 +316,7 @@ What: ... | Why: ... | Where: ... | Learned: ...
 
 ---
 
-## 💻 Referencia de Comandos CLI
+## Referencia de Comandos CLI
 
 ```bash
 # 1. Bootstrapping rápido de contexto activo (< 100 tokens)
@@ -368,7 +371,7 @@ cogni skill
 
 ---
 
-## 🏷️ Regla de las 3 Capas de Tags
+## Regla de las 3 Capas de Tags
 
 Para evitar etiquetas ambiguas o duplicadas, cada firma semántica organiza de 3 a 5 tags en 3 capas deterministas:
 
@@ -378,7 +381,7 @@ Para evitar etiquetas ambiguas o duplicadas, cada firma semántica organiza de 3
 
 ---
 
-## 🏗️ Arquitectura del Repositorio
+## Arquitectura del Repositorio
 
 ```text
 cogni-memory/
@@ -399,7 +402,7 @@ cogni-memory/
 
 ---
 
-## 🛠️ Desarrollo y Release de Versiones
+## Desarrollo y Release de Versiones
 
 El sistema de versiones es **centralizado por Tag de Git y `-ldflags`**. Para generar una nueva versión desde desarrollo:
 
@@ -418,12 +421,12 @@ El comando automatiza la compilación con la versión exacta inyectada en Go, cr
 
 ---
 
-## 👨‍💻 Autor y Mantenimiento
+## Autor y Mantenimiento
 
 Desarrollado y mantenido por **Adelys Alberto** ([@AdelysAlberto](https://github.com/AdelysAlberto)).
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 Este proyecto está distribuido bajo la licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
