@@ -160,6 +160,15 @@ func InstallSkill(targetDir string) error {
 	return os.WriteFile(dest, []byte(SkillContent), 0644)
 }
 
+// RemoveSkill removes the cogni skill directory from the target path if it exists
+func RemoveSkill(targetDir string) error {
+	skillDir := filepath.Join(targetDir, "cogni")
+	if _, err := os.Stat(skillDir); err == nil {
+		return os.RemoveAll(skillDir)
+	}
+	return nil
+}
+
 // InstallRules writes the global/local rules to their respective directories
 func InstallRules(homeDir string, allowedHarnesses []string) error {
 	rulesDirs := map[string]string{
@@ -203,21 +212,28 @@ func InstallRules(homeDir string, allowedHarnesses []string) error {
 		}
 	}
 
+	// Limpiar cualquier skill legado previo en arneses que usan Always-On Rules + MCP
+	if harnessAllowed("antigravity") {
+		_ = RemoveSkill(filepath.Join(homeDir, ".gemini", "config", "skills"))
+		_ = RemoveSkill(filepath.Join(".agents", "skills"))
+	}
+	if harnessAllowed("cursor") {
+		_ = RemoveSkill(filepath.Join(homeDir, ".cursor", "skills"))
+	}
+
 	return nil
 }
 
-// GetHarnessSkillPaths returns all supported AI harness skill directory paths
+// GetHarnessSkillPaths returns supported AI harness skill directory paths.
+// Nota: Arneses modernos como Antigravity y Cursor usan Always-On Rules + MCP
+// y NO requieren inyectar cogni como skill (evita lecturas forzadas de SKILL.md).
 func GetHarnessSkillPaths(homeDir string) map[string][]string {
 	return map[string][]string{
 		"local": {
 			filepath.Join(".agents", "skills"),
 		},
-		"antigravity": {
-			filepath.Join(homeDir, ".gemini", "config", "skills"),
-		},
-		"cursor": {
-			filepath.Join(homeDir, ".cursor", "skills"),
-		},
+		"antigravity": {},
+		"cursor":      {},
 		"claude": {
 			filepath.Join(homeDir, ".claude", "skills"),
 		},
