@@ -97,13 +97,21 @@ El instalador detecta automaticamente tu sistema operativo (macOS / Linux / Wind
 
 ### macOS (Apple Silicon M1/M2/M3/M4 e Intel)
 
-Abre tu terminal y ejecuta:
+Dispones de dos métodos de instalación:
 
+#### Opción A: Descarga del Instalador Gráfico DMG (Recomendado)
+Descarga la aplicación nativa para la barra de menús, firmada y notarizada por Apple:
+
+* **[Descargar CogniBar.dmg (macOS Universal)](https://github.com/AdelysAlberto/cogni-memory/releases/latest/download/CogniBar.dmg)**
+
+Abre el archivo `.dmg` descargado y arrastra **CogniBar** a tu carpeta de **Aplicaciones**.
+
+#### Opción B: Instalación por Terminal (CLI + Motor de Memoria)
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
-Para activar la aplicación residente en la barra de menús (**CogniBar**):
+Para activar la aplicación residente en la barra de menús desde la terminal:
 ```bash
 cogni bar
 ```
