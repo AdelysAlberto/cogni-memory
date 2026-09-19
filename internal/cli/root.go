@@ -231,94 +231,95 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 		return
 	}
 
-	choice := ""
+	availableHarnesses := []SelectItem{
+		{Key: "all", Title: "TODOS los entornos (Recomendado)", Description: "Configura automáticamente todos los arneses detectados"},
+		{Key: "pi", Title: "Pi Coding Agent", Description: "~/.pi/agent/ (MCP, skills, rules, AGENTS.md)"},
+		{Key: "antigravity", Title: "Gemini Antigravity", Description: "~/.gemini/config/ (MCP + Always-On Rules)"},
+		{Key: "cursor", Title: "Cursor IDE", Description: "~/.cursor/ (MCP + Always-On Rules)"},
+		{Key: "claude", Title: "Claude Code / Desktop", Description: "~/.claude/ & claude_desktop_config.json"},
+		{Key: "opencode", Title: "OpenCode", Description: "~/.config/opencode/ (MCP v2 + Skills + Rules)"},
+		{Key: "local", Title: "Agentes Estándar", Description: "~/.agents/ (Skills + Rules + Workspace)"},
+		{Key: "copilot", Title: "GitHub Copilot", Description: "VS Code Copilot User Prompts & Instructions"},
+		{Key: "hermes", Title: "Hermes CLI", Description: "~/.hermes/ (MCP + Skills + Rules)"},
+		{Key: "codex", Title: "OpenAI Codex CLI", Description: "~/.codex/config.toml (TOML MCP + Skills)"},
+		{Key: "none", Title: "Omitir instalación de skills", Description: "Solo inicializar base de datos local/global"},
+	}
+
+	selectedKey := ""
 	if harnessFlag != "" {
-		switch strings.ToLower(harnessFlag) {
+		hLower := strings.ToLower(harnessFlag)
+		switch hLower {
 		case "antigravity", "1":
-			choice = "1"
+			selectedKey = "antigravity"
 		case "cursor", "2":
-			choice = "2"
+			selectedKey = "cursor"
 		case "claude", "3":
-			choice = "3"
+			selectedKey = "claude"
 		case "pi", "4":
-			choice = "4"
+			selectedKey = "pi"
 		case "opencode", "5":
-			choice = "5"
+			selectedKey = "opencode"
 		case "local", "agents", "6":
-			choice = "6"
+			selectedKey = "local"
 		case "copilot", "7":
-			choice = "7"
+			selectedKey = "copilot"
 		case "hermes", "8":
-			choice = "8"
+			selectedKey = "hermes"
 		case "codex", "9":
-			choice = "9"
+			selectedKey = "codex"
 		case "all", "10":
-			choice = "10"
+			selectedKey = "all"
 		case "none", "11":
-			choice = "11"
+			selectedKey = "none"
 		default:
-			choice = harnessFlag
+			selectedKey = hLower
 		}
 	} else if autoAll {
-		choice = "10"
+		selectedKey = "all"
 	} else {
-		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
-		fmt.Println("  1) Gemini Antigravity    (~/.gemini/)")
-		fmt.Println("  2) Cursor IDE            (~/.cursor/)")
-		fmt.Println("  3) Claude Code / Desktop (~/.claude/)")
-		fmt.Println("  4) Pi Coding Agent       (~/.pi/agent/)")
-		fmt.Println("  5) OpenCode              (~/.config/opencode/)")
-		fmt.Println("  6) Agentes Estándar      (~/.agents/)")
-		fmt.Println("  7) GitHub Copilot        (VS Code / Copilot)")
-		fmt.Println("  8) Hermes CLI            (~/.hermes/)")
-		fmt.Println("  9) Codex CLI             (~/.codex/)")
-		fmt.Println(" 10) TODOS los entornos    (Recomendado)")
-		fmt.Println(" 11) Omitir skill")
-		fmt.Print("\nIngresa tu opción (1-11) [por defecto: 10]: ")
-
-		var input string
-		_, _ = fmt.Scanln(&input)
-		choice = strings.TrimSpace(input)
-		if choice == "" {
-			choice = "10"
+		selectedItem, err := InteractiveSelect("🤖 Selecciona el entorno o Harness de IA que utilizas:", availableHarnesses, 0, 4)
+		if err != nil {
+			fmt.Println("⏭️ Instalación de Skill cancelada.")
+			return
 		}
+		selectedKey = selectedItem.Key
 	}
 
 	var selectedHarnesses []string
 	var harnessLabel string
 
-	switch choice {
-	case "1":
+	switch selectedKey {
+	case "antigravity":
 		selectedHarnesses = []string{"antigravity"}
 		harnessLabel = "Gemini Antigravity"
-	case "2":
+	case "cursor":
 		selectedHarnesses = []string{"cursor"}
 		harnessLabel = "Cursor IDE"
-	case "3":
+	case "claude":
 		selectedHarnesses = []string{"claude"}
 		harnessLabel = "Claude Code / Desktop"
-	case "4":
+	case "pi":
 		selectedHarnesses = []string{"pi"}
 		harnessLabel = "Pi Coding Agent"
-	case "5":
+	case "opencode":
 		selectedHarnesses = []string{"opencode"}
 		harnessLabel = "OpenCode"
-	case "6":
+	case "local":
 		selectedHarnesses = []string{"local"}
 		harnessLabel = "Agentes Estándar (~/.agents/)"
-	case "7":
+	case "copilot":
 		selectedHarnesses = []string{"copilot"}
 		harnessLabel = "GitHub Copilot"
-	case "8":
+	case "hermes":
 		selectedHarnesses = []string{"hermes"}
 		harnessLabel = "Hermes CLI"
-	case "9":
+	case "codex":
 		selectedHarnesses = []string{"codex"}
-		harnessLabel = "Codex CLI"
-	case "10":
+		harnessLabel = "OpenAI Codex CLI"
+	case "all":
 		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "pi", "opencode", "copilot", "hermes", "codex"}
 		harnessLabel = "Todos los arneses detectados"
-	case "11":
+	case "none":
 		fmt.Println("⏭️ Instalación de Skill omitida.")
 		return
 	default:

@@ -106,34 +106,6 @@ fi
 SKILL_SOURCE="$REPO_DIR/SKILL.md"
 RULE_SOURCE="$REPO_DIR/rules/cogni.rules.md"
 
-echo ""
-echo "🤖 Selecciona el entorno o Harness de IA que utilizas:"
-echo "  1) Gemini Antigravity    (~/.gemini/)"
-echo "  2) Cursor IDE            (~/.cursor/)"
-echo "  3) Claude Code / Desktop (~/.claude/)"
-echo "  4) OpenCode              (~/.config/opencode/)"
-echo "  5) Agentes Estándar      (~/.agents/)"
-echo "  6) GitHub Copilot        (VS Code / Copilot Chat)"
-echo "  7) Hermes CLI            (~/.hermes/)"
-echo "  8) Codex CLI             (~/.codex/)"
-echo "  9) TODOS los entornos    (Recomendado)"
-echo " 10) Omitir skill"
-echo ""
-
-HARNESS_CHOICE="${HARNESS_CHOICE:-}"
-if [ -z "$HARNESS_CHOICE" ]; then
-    if [ -t 0 ]; then
-        read -p "Ingresa tu opción (1-10) [por defecto: 9]: " HARNESS_CHOICE || true
-    elif [ -r /dev/tty ]; then
-        read -p "Ingresa tu opción (1-10) [por defecto: 9]: " HARNESS_CHOICE < /dev/tty 2>/dev/null || true
-    fi
-fi
-
-if [ -z "$HARNESS_CHOICE" ]; then
-    echo "ℹ️ Modo no interactivo detectado: Seleccionando opción 9 (TODOS por defecto)..."
-    HARNESS_CHOICE=9
-fi
-
 install_copilot_instructions() {
     local vscode_dir prompts_dir copilot_instruction_file
     vscode_dir="$(get_vscode_user_dir)"
@@ -166,24 +138,38 @@ If `cogni` CLI is not available, explain it and provide the exact install/enable
 EOF
 }
 
-HARNESS_FLAG=""
-case $HARNESS_CHOICE in
-    1) HARNESS_FLAG="antigravity" ;;
-    2) HARNESS_FLAG="cursor" ;;
-    3) HARNESS_FLAG="claude" ;;
-    4) HARNESS_FLAG="opencode" ;;
-    5) HARNESS_FLAG="local" ;;
-    6) HARNESS_FLAG="copilot" ;;
-    7) HARNESS_FLAG="hermes" ;;
-    8) HARNESS_FLAG="codex" ;;
-    9) HARNESS_FLAG="all" ;;
-    10) HARNESS_FLAG="none" ;;
-    *) HARNESS_FLAG="all" ;;
-esac
+HARNESS_CHOICE="${HARNESS_CHOICE:-}"
 
-if [ "$HARNESS_FLAG" = "copilot" ] || [ "$HARNESS_FLAG" = "all" ]; then
+if [ -n "$HARNESS_CHOICE" ]; then
+    HARNESS_FLAG=""
+    case "$HARNESS_CHOICE" in
+        1|antigravity) HARNESS_FLAG="antigravity" ;;
+        2|cursor)      HARNESS_FLAG="cursor" ;;
+        3|claude)      HARNESS_FLAG="claude" ;;
+        4|pi)          HARNESS_FLAG="pi" ;;
+        5|opencode)    HARNESS_FLAG="opencode" ;;
+        6|local|agents) HARNESS_FLAG="local" ;;
+        7|copilot)     HARNESS_FLAG="copilot" ;;
+        8|hermes)      HARNESS_FLAG="hermes" ;;
+        9|codex)       HARNESS_FLAG="codex" ;;
+        10|all)        HARNESS_FLAG="all" ;;
+        11|none)       HARNESS_FLAG="none" ;;
+        *)             HARNESS_FLAG="$HARNESS_CHOICE" ;;
+    esac
+
+    if [ "$HARNESS_FLAG" = "copilot" ] || [ "$HARNESS_FLAG" = "all" ]; then
+        install_copilot_instructions
+    fi
+
+    "$BIN_INSTALL_DIR/cogni" init --harness "$HARNESS_FLAG"
+elif [ -t 0 ] || [ -r /dev/tty ]; then
+    # Terminal interactiva: delegar al selector TUI enriquecido de Cogni
     install_copilot_instructions
+    "$BIN_INSTALL_DIR/cogni" init
+else
+    echo "ℹ️ Modo no interactivo detectado: Seleccionando todos los entornos por defecto..."
+    install_copilot_instructions
+    "$BIN_INSTALL_DIR/cogni" init --harness all
 fi
 
-"$BIN_INSTALL_DIR/cogni" init --harness "$HARNESS_FLAG"
 
