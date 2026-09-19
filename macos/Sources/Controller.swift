@@ -42,9 +42,10 @@ public final class CogniController: ObservableObject {
     @Published public var isLaunchAtLoginEnabled: Bool = false
 
     // Update Management
-    @Published public var currentVersion: String = "v2.2.0"
+    @Published public var currentVersion: String = "v2.3.1"
     @Published public var latestVersion: String?
     @Published public var releaseURL: String?
+    @Published public var hasCheckedUpdate: Bool = false
     @Published public var isCheckingUpdate: Bool = false
     @Published public var isUpgrading: Bool = false
     @Published public var updateMessage: String?
@@ -58,7 +59,6 @@ public final class CogniController: ObservableObject {
         checkLaunchAtLoginStatus()
         fetchLocalVersion()
         refreshAll()
-        checkForUpdatesSilent()
 
         // Setup real-time file watcher on SQLite database
         dbWatcher = DBWatcher { [weak self] in
@@ -192,18 +192,15 @@ public final class CogniController: ObservableObject {
         }
     }
 
-    public func checkForUpdatesSilent() {
-        Task {
-            await doCheckForUpdates(verbose: false)
-        }
-    }
-
     public func checkForUpdates() {
         guard !isCheckingUpdate else { return }
         isCheckingUpdate = true
-        updateMessage = "Comprobando actualizaciones..."
+        updateMessage = "Comprobando versión disponible en GitHub..."
 
         Task {
+            await MainActor.run {
+                self.fetchLocalVersion()
+            }
             await doCheckForUpdates(verbose: true)
             await MainActor.run {
                 self.isCheckingUpdate = false
@@ -216,6 +213,7 @@ public final class CogniController: ObservableObject {
 
         var request = URLRequest(url: url)
         request.setValue("CogniBar-App", forHTTPHeaderField: "User-Agent")
+        request.cachePolicy = .reloadIgnoringLocalAndRemoteCacheData
         request.timeoutInterval = 10
 
         do {
@@ -248,11 +246,12 @@ public final class CogniController: ObservableObject {
             await MainActor.run {
                 self.latestVersion = remoteClean
                 self.releaseURL = release.htmlUrl
+                self.hasCheckedUpdate = true
                 self.updateAvailable = isNewer
 
                 if isNewer {
-                    self.updateMessage = "¡Nueva versión \(remoteClean) disponible!"
-                } else if verbose {
+                    self.updateMessage = "¡Nueva versión \(remoteClean) disponible para instalar!"
+                } else {
                     self.updateMessage = "Cogni está actualizado a la última versión (\(localClean))."
                 }
             }

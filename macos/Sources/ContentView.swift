@@ -117,9 +117,6 @@ public struct ContentView: View {
         let isSelected = controller.selectedTab == index
         return Button(action: {
             controller.selectedTab = index
-            if index == 2 && controller.latestVersion == nil {
-                controller.checkForUpdates()
-            }
         }) {
             HStack(spacing: 4) {
                 Image(systemName: icon)
@@ -391,12 +388,12 @@ public struct ContentView: View {
                     Circle()
                         .fill(controller.updateAvailable ? CogniTheme.electricCyan.opacity(0.15) : CogniTheme.cobaltRoyal.opacity(0.15))
                         .frame(width: 40, height: 40)
-                    Image(systemName: controller.updateAvailable ? "arrow.down.circle.fill" : "checkmark.seal.fill")
+                    Image(systemName: controller.updateAvailable ? "arrow.down.circle.fill" : (controller.hasCheckedUpdate ? "checkmark.seal.fill" : "arrow.triangle.2.circlepath"))
                         .font(.system(size: 20))
                         .foregroundColor(controller.updateAvailable ? CogniTheme.electricCyan : CogniTheme.cobaltRoyal)
                 }
 
-                Text(controller.updateAvailable ? "¡Actualización Disponible!" : "Cogni está al día")
+                Text(controller.updateAvailable ? "¡Nueva Versión Disponible!" : (controller.hasCheckedUpdate ? "Cogni está al día" : "Comprobación de Versión"))
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(CogniTheme.textPrimary)
 
@@ -436,30 +433,45 @@ public struct ContentView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundColor(controller.updateAvailable ? CogniTheme.electricCyan : CogniTheme.textDim)
                     .multilineTextAlignment(.center)
+            } else if !controller.hasCheckedUpdate {
+                Text("Presiona \"Comprobar Actualización\" para verificar si existe una nueva versión en GitHub.")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundColor(CogniTheme.textDim)
+                    .multilineTextAlignment(.center)
             }
 
             // Action Buttons
             if controller.updateAvailable {
-                Button(action: { controller.performUpgrade() }) {
-                    HStack(spacing: 6) {
-                        if controller.isUpgrading {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Image(systemName: "arrow.down.to.line")
+                VStack(spacing: 6) {
+                    Button(action: { controller.performUpgrade() }) {
+                        HStack(spacing: 6) {
+                            if controller.isUpgrading {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.down.to.line")
+                                    .font(.system(size: 11, weight: .bold))
+                            }
+                            Text(controller.isUpgrading ? "Actualizando..." : "Actualizar a \(controller.latestVersion ?? "nueva versión")")
                                 .font(.system(size: 11, weight: .bold))
                         }
-                        Text(controller.isUpgrading ? "Actualizando..." : "Descargar e Instalar")
-                            .font(.system(size: 11, weight: .bold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(CogniTheme.electricCyan)
+                        .foregroundColor(CogniTheme.bgDeep)
+                        .cornerRadius(6)
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 8)
-                    .background(CogniTheme.electricCyan)
-                    .foregroundColor(CogniTheme.bgDeep)
-                    .cornerRadius(6)
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(controller.isUpgrading)
+
+                    Button(action: { controller.checkForUpdates() }) {
+                        Text("Volver a Comprobar")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(CogniTheme.textDim)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(controller.isCheckingUpdate || controller.isUpgrading)
                 }
-                .buttonStyle(PlainButtonStyle())
-                .disabled(controller.isUpgrading)
             } else {
                 Button(action: { controller.checkForUpdates() }) {
                     HStack(spacing: 5) {
@@ -470,7 +482,7 @@ public struct ContentView: View {
                             Image(systemName: "arrow.clockwise")
                                 .font(.system(size: 11, weight: .semibold))
                         }
-                        Text(controller.isCheckingUpdate ? "Comprobando..." : "Buscar Actualización")
+                        Text(controller.isCheckingUpdate ? "Comprobando..." : "Comprobar Actualización")
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
