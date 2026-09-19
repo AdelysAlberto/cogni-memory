@@ -33,13 +33,23 @@ public final class CogniController: ObservableObject {
 
     public init() {
         checkLaunchAtLoginStatus()
-        fetchLocalVersion()
         fetchConfig()
+        Task.detached(priority: .background) {
+            let res = Shell.runCogni(["version"])
+            if res.status == 0 {
+                let out = res.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                if let vIdx = out.range(of: "v") {
+                    let ver = String(out[vIdx.lowerBound...]).components(separatedBy: " ")[0]
+                    await MainActor.run {
+                        self.currentVersion = ver
+                    }
+                }
+            }
+        }
     }
 
     // Light refresh: only reads local files/binary - no heavy CLI subprocess calls
     public func refreshAll() {
-        fetchLocalVersion()
         fetchConfig()
     }
 

@@ -16,9 +16,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.image = CogniLogo.statusImage(pulse: .idle)
+            button.imagePosition = .imageOnly
             button.target = self
             button.action = #selector(statusItemClicked(_:))
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp, .leftMouseDown, .rightMouseDown])
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
         // Configure Popover
@@ -34,11 +35,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.animates = true
         self.popover = popover
 
-        // Static icon - no observers needed
-        if let button = statusItem.button {
-            button.image = CogniLogo.statusImage(pulse: .idle)
-        }
-
         // Register Global HotKey (⌥⌘C)
         hotKey = GlobalHotKey { [weak self] in
             self?.togglePopover()
@@ -52,9 +48,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        if event.type == .rightMouseUp || event.type == .rightMouseDown || event.modifierFlags.contains(.control) {
+        if event.type == .rightMouseUp || event.modifierFlags.contains(.control) {
             showContextMenu(at: sender)
-        } else if event.type == .leftMouseUp || event.type == .leftMouseDown {
+        } else {
             togglePopover()
         }
     }

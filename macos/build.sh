@@ -61,9 +61,11 @@ if [[ "$1" == "--install" || "$1" == "-i" ]]; then
     mkdir -p "$HOME/Applications"
     echo "🚀 Instalando en $INSTALL_TARGET..."
     
-    # Detener instancia previa si está corriendo
+    # Detener instancias previas si están corriendo
     pkill -x "$APP_NAME" 2>/dev/null || true
+    pkill -x "CogniBar" 2>/dev/null || true
     rm -rf "$INSTALL_TARGET"
+    rm -rf "$HOME/Applications/CogniBar.app"
     cp -R "$APP_BUNDLE" "$INSTALL_TARGET"
     
     open "$INSTALL_TARGET"
