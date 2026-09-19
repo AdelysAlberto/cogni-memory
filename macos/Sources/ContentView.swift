@@ -100,7 +100,7 @@ public struct ContentView: View {
     // MARK: - Navigation Tabs
     private var navigationTabsView: some View {
         HStack(spacing: 4) {
-            tabButton(title: "Estado", icon: "brain", index: 0)
+            tabButton(title: "Estado", icon: "chart.bar.fill", index: 0)
             tabButton(title: "Comandos", icon: "terminal.fill", index: 1)
             tabButton(title: "Actualizar", icon: "arrow.triangle.2.circlepath", index: 2, hasBadge: controller.updateAvailable)
         }
@@ -149,50 +149,36 @@ public struct ContentView: View {
 
     private var actionsCardView: some View {
         VStack(spacing: 10) {
-            // Main action: Open Web UI
-            Button(action: { controller.openWebUI() }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "globe")
-                        .font(.system(size: 13, weight: .semibold))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text("Abrir Web UI")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Dashboard de memoria y proyectos")
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundColor(CogniTheme.electricCyan.opacity(0.7))
-                    }
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
-                        .font(.system(size: 10, weight: .semibold))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(CogniTheme.electricCyan.opacity(0.12))
-                .foregroundColor(CogniTheme.electricCyan)
-                .cornerRadius(8)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(CogniTheme.electricCyan.opacity(0.3), lineWidth: 1)
-                )
-            }
-            .buttonStyle(PlainButtonStyle())
-
-            Divider()
-                .background(CogniTheme.border)
-
-            // Secondary actions row
             HStack(spacing: 8) {
-                Button(action: { controller.cleanAndVacuum() }) {
+                Button(action: { controller.openWebUI() }) {
                     HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
+                        Image(systemName: "globe")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(controller.isCleaning ? "Optimizando..." : "Optimizar BD")
+                        Text("Abrir Web UI")
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
-                    .background(CogniTheme.volcanicOrange.opacity(0.12))
+                    .background(CogniTheme.electricCyan.opacity(0.15))
+                    .foregroundColor(CogniTheme.electricCyan)
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(CogniTheme.electricCyan.opacity(0.3), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(PlainButtonStyle())
+
+                Button(action: { controller.cleanAndVacuum() }) {
+                    HStack(spacing: 5) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 11, weight: .semibold))
+                        Text(controller.isCleaning ? "Limpiando..." : "Optimizar")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .background(CogniTheme.volcanicOrange.opacity(0.15))
                     .foregroundColor(CogniTheme.volcanicOrange)
                     .cornerRadius(6)
                     .overlay(
@@ -202,17 +188,9 @@ public struct ContentView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(controller.isCleaning)
-
-                if !controller.statusMessage.isEmpty && controller.statusMessage != "Listo" {
-                    Text(controller.statusMessage)
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundColor(CogniTheme.textDim)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                }
             }
         }
-        .padding(12)
+        .padding(10)
         .background(CogniTheme.bgCard)
         .cornerRadius(10)
         .overlay(
