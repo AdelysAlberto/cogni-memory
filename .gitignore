@@ -1,5 +1,7 @@
 # Go Binaries & Build Artifacts
 bin/
+macos/build/
+macos/dist/
 *.exe
 *.exe~
 *.dll

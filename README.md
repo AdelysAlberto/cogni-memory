@@ -91,17 +91,41 @@ Summary: What: Todo texto visible en TSX debe usar t('namespace:key') | Why: Est
 
 ---
 
-## Instalacion
+## Instalacion Multiplataforma
 
-### 1. Script Universal (Recomendado)
+El instalador detecta automaticamente tu sistema operativo (macOS / Linux / Windows) y tu arquitectura (`arm64`, `x86_64`, `amd64`).
+
+### macOS (Apple Silicon M1/M2/M3/M4 e Intel)
+
+Abre tu terminal y ejecuta:
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
-El script detecta automaticamente tus arneses instalados y permite seleccionar el entorno deseado.
+Para activar la aplicación residente en la barra de menús (**CogniBar**):
+```bash
+cogni bar
+```
 
-### 2. Compilacion Local desde Fuente (Go 1.22+)
+### Linux (Ubuntu, Debian, Fedora, Arch, Alpine en amd64 / arm64)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
+```
+
+### Windows (PowerShell / WSL)
+
+En **PowerShell**:
+```powershell
+# Opcion A: Instalacion directa con Go (Recomendada)
+go install github.com/AdelysAlberto/cogni/cmd/cogni@latest
+
+# Opcion B: Vía WSL (Windows Subsystem for Linux) / Git Bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
+```
+
+### Compilacion Manual desde Fuente (Go 1.22+)
 
 ```bash
 git clone https://github.com/AdelysAlberto/cogni-memory.git cogni
@@ -109,18 +133,36 @@ cd cogni
 make install
 ```
 
-El binario queda compilado e instalado en `~/.local/bin/cogni`.
+---
 
-### 3. Configuracion de un Arnés Especifico
+## CogniBar: Aplicacion de Barra de Menus (macOS)
+
+Cogni incluye una aplicación nativa para la barra superior de macOS construida en Swift y SwiftUI (`macos/`):
+
+* **Synapse Pulse**: El icono en la barra superior emite un destello reactivo en tiempo real cada vez que un agente de IA guarda o recupera una memoria (monitoreo a nivel de kernel mediante `FSEvents` con 0ms de retardo y cero consumo de CPU/batería).
+* **Atajo Global (`⌥⌘C` / Option + Command + C)**: Abre el panel interactivo desde cualquier pantalla sin requerir permisos de accesibilidad.
+* **Control Total**: Muestra los tokens ahorrados, estado de la base de datos, arneses activos y botones para abrir el Web Dashboard o compactar la base de datos.
+* **Firma y Notarizacion Apple**: Compatible con Developer ID Application y Notary Service de Apple (`make macos-package`).
+
+---
+
+## Configuracion de Arneses de IA
+
+Al ejecutar `cogni init`, dispones de un selector interactivo en terminal con filtrado en tiempo real:
 
 ```bash
-# Configurar para Pi Coding Agent (pi.dev)
-cogni init --harness pi
+# Selector interactivo TUI (escribe para filtrar y navega con flechas)
+cogni init
 
-# Configurar para Claude Code
-cogni init --harness claude
+# Configurar para un arnés específico de forma directa
+cogni init --harness pi          # Pi Coding Agent (pi.dev)
+cogni init --harness antigravity # Gemini Antigravity
+cogni init --harness cursor      # Cursor IDE
+cogni init --harness claude      # Claude Code / Desktop
+cogni init --harness opencode    # OpenCode
+cogni init --harness copilot     # GitHub Copilot
 
-# Configurar en todos los arneses detectados
+# Configurar en todos los arneses detectados en el sistema
 cogni init --all
 ```
 
@@ -164,17 +206,17 @@ cogni save \
 cogni get arch/nav/modal-stacking
 cogni get --id 96
 
-# 5. Guardar resumen de sesion
-cogni session-summary \
-  --goal "Optimizar motor de busqueda de memoria" \
-  --accomplished "Implementado BM25 Cascade y soporte para Pi" \
-  --where "internal/storage/sqlite.go, internal/core/skill.go"
+# 5. Abrir la app de la barra de menús / Bandeja
+cogni bar
 
-# 6. Lanzar la interfaz grafica en el navegador
+# 6. Lanzar la interfaz gráfica en el navegador
 cogni ui
 
-# 7. Estadisticas de memoria y tokens ahorrados
+# 7. Estadísticas de memoria y tokens ahorrados
 cogni stats
+
+# 8. Actualización atómica resiliente
+cogni upgrade
 ```
 
 ---
