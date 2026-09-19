@@ -17,6 +17,7 @@ public struct CogniConfigDTO: Codable {
 public final class CogniController: ObservableObject {
     @Published public var selectedTab: Int = 0 // 0: Estado, 1: Comandos, 2: Actualizaciones
     @Published public var activeHarnesses: [String] = []
+    @Published public var activeProject: String?
     @Published public var isLaunchAtLoginEnabled: Bool = false
     @Published public var isCleaning: Bool = false
     @Published public var statusMessage: String = "Listo"
@@ -57,11 +58,16 @@ public final class CogniController: ObservableObject {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let configPath = "\(home)/.cogni/config.json"
         if let data = try? Data(contentsOf: URL(fileURLWithPath: configPath)),
-           let cfg = try? JSONDecoder().decode(CogniConfigDTO.self, from: data),
-           let harnesses = cfg.selectedHarnesses {
-            self.activeHarnesses = harnesses
+           let cfg = try? JSONDecoder().decode(CogniConfigDTO.self, from: data) {
+            if let harnesses = cfg.selectedHarnesses, !harnesses.isEmpty {
+                self.activeHarnesses = harnesses
+            } else {
+                self.activeHarnesses = ["antigravity", "cursor", "pi", "local"]
+            }
+            self.activeProject = cfg.activeProject
         } else {
-            self.activeHarnesses = ["local", "antigravity", "cursor", "pi"]
+            self.activeHarnesses = ["antigravity", "cursor", "pi", "local"]
+            self.activeProject = nil
         }
     }
 

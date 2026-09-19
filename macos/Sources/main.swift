@@ -29,7 +29,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             })
         )
-        hosting.preferredContentSize = CGSize(width: 330, height: 440)
+        hosting.preferredContentSize = CGSize(width: 320, height: 320)
         popover.contentViewController = hosting
         popover.behavior = .transient
         popover.animates = true

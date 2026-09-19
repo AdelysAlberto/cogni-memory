@@ -13,7 +13,7 @@ public struct ContentView: View {
     }
 
     public var body: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             // MARK: - Header
             headerView
 
@@ -38,8 +38,8 @@ public struct ContentView: View {
             // MARK: - Footer
             footerView
         }
-        .padding(14)
-        .frame(width: 330)
+        .padding(12)
+        .frame(width: 320, alignment: .top)
         .background(CogniTheme.bgDeep)
         .foregroundColor(CogniTheme.textPrimary)
         .animation(.easeInOut(duration: 0.18), value: controller.selectedTab)
@@ -51,7 +51,7 @@ public struct ContentView: View {
             ZStack {
                 Circle()
                     .fill(CogniTheme.electricCyan.opacity(0.12))
-                    .frame(width: 28, height: 28)
+                    .frame(width: 26, height: 26)
                 Image(nsImage: CogniLogo.statusImage(pulse: .idle))
                     .renderingMode(.template)
                     .foregroundColor(CogniTheme.electricCyan)
@@ -71,7 +71,7 @@ public struct ContentView: View {
                         .cornerRadius(3)
                 }
                 Text("Universal Agent Engine")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 9.5, weight: .medium))
                     .foregroundColor(CogniTheme.textDim)
             }
 
@@ -81,17 +81,17 @@ public struct ContentView: View {
             HStack(spacing: 4) {
                 Circle()
                     .fill(CogniTheme.electricCyan)
-                    .frame(width: 6, height: 6)
+                    .frame(width: 5, height: 5)
                 Text("ACTIVO")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 8.5, weight: .bold))
                     .foregroundColor(CogniTheme.electricCyan)
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 3)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2.5)
             .background(CogniTheme.electricCyan.opacity(0.12))
-            .cornerRadius(12)
+            .cornerRadius(10)
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
+                RoundedRectangle(cornerRadius: 10)
                     .stroke(CogniTheme.electricCyan.opacity(0.25), lineWidth: 1)
             )
         }
@@ -141,54 +141,58 @@ public struct ContentView: View {
 
     // MARK: - TAB 0: Estado
     private var statusTabView: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
+            brandHeroCardView
             actionsCardView
             harnessesCardView
         }
     }
 
-    private var actionsCardView: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                Button(action: { controller.openWebUI() }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "globe")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Abrir Web UI")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(CogniTheme.electricCyan.opacity(0.15))
-                    .foregroundColor(CogniTheme.electricCyan)
-                    .cornerRadius(6)
+    private var brandHeroCardView: some View {
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(
+                        LinearGradient(
+                            colors: [CogniTheme.electricCyan.opacity(0.16), CogniTheme.cobaltRoyal.opacity(0.16)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 36, height: 36)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 6)
+                        RoundedRectangle(cornerRadius: 8)
                             .stroke(CogniTheme.electricCyan.opacity(0.3), lineWidth: 1)
                     )
-                }
-                .buttonStyle(PlainButtonStyle())
-
-                Button(action: { controller.cleanAndVacuum() }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(controller.isCleaning ? "Limpiando..." : "Optimizar")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(CogniTheme.volcanicOrange.opacity(0.15))
-                    .foregroundColor(CogniTheme.volcanicOrange)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(CogniTheme.volcanicOrange.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-                .disabled(controller.isCleaning)
+                Image(nsImage: CogniLogo.statusImage(pulse: .idle))
+                    .renderingMode(.template)
+                    .foregroundColor(CogniTheme.electricCyan)
             }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Memoria Contextual Activa")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(CogniTheme.textPrimary)
+
+                Text("Indexación BM25 + Recuerdo Semántico")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(CogniTheme.textDim)
+
+                if let project = controller.activeProject, !project.isEmpty {
+                    HStack(spacing: 4) {
+                        Text("Proyecto:")
+                            .font(.system(size: 8.5, weight: .medium))
+                            .foregroundColor(CogniTheme.textDim)
+                        Text(project)
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundColor(CogniTheme.electricCyan)
+                            .lineLimit(1)
+                    }
+                    .padding(.top, 1)
+                }
+            }
+
+            Spacer()
         }
         .padding(10)
         .background(CogniTheme.bgCard)
@@ -199,10 +203,53 @@ public struct ContentView: View {
         )
     }
 
+    private var actionsCardView: some View {
+        HStack(spacing: 8) {
+            Button(action: { controller.openWebUI() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 11, weight: .bold))
+                    Text("Abrir Web UI")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(CogniTheme.electricCyan.opacity(0.15))
+                .foregroundColor(CogniTheme.electricCyan)
+                .cornerRadius(7)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(CogniTheme.electricCyan.opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+
+            Button(action: { controller.cleanAndVacuum() }) {
+                HStack(spacing: 5) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 11, weight: .bold))
+                    Text(controller.isCleaning ? "Limpiando..." : "Optimizar")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 7)
+                .background(CogniTheme.volcanicOrange.opacity(0.15))
+                .foregroundColor(CogniTheme.volcanicOrange)
+                .cornerRadius(7)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7)
+                        .stroke(CogniTheme.volcanicOrange.opacity(0.35), lineWidth: 1)
+                )
+            }
+            .buttonStyle(PlainButtonStyle())
+            .disabled(controller.isCleaning)
+        }
+    }
+
     private var harnessesCardView: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("ARNESES DE IA CONECTADOS")
-                .font(.system(size: 9, weight: .bold))
+                .font(.system(size: 8.5, weight: .bold))
                 .foregroundColor(CogniTheme.textDim)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -217,7 +264,7 @@ public struct ContentView: View {
                                 .foregroundColor(CogniTheme.textPrimary)
                         }
                         .padding(.horizontal, 7)
-                        .padding(.vertical, 4)
+                        .padding(.vertical, 3.5)
                         .background(CogniTheme.bgCardHover)
                         .cornerRadius(6)
                         .overlay(
@@ -228,7 +275,7 @@ public struct ContentView: View {
                 }
             }
         }
-        .padding(10)
+        .padding(9)
         .background(CogniTheme.bgCard)
         .cornerRadius(10)
         .overlay(
