@@ -31,7 +31,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             })
         )
-        hostingController.view.frame.size = NSSize(width: 330, height: 440)
         popover.contentViewController = hostingController
         self.popover = popover
 
@@ -66,7 +65,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             controller.refreshAll()
             NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            let edge: NSRectEdge = button.isFlipped ? .maxY : .minY
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
             if let window = popover.contentViewController?.view.window {
                 window.makeKeyAndOrderFront(nil)
             }
