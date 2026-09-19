@@ -24,14 +24,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Configure Popover
         let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = true
-        let hostingController = NSHostingController(
+        let hosting = NSHostingController(
             rootView: ContentView(controller: controller, onQuit: {
                 NSApp.terminate(nil)
             })
         )
-        popover.contentViewController = hostingController
+        hosting.sizingOptions = [.preferredContentSize]
+        popover.contentViewController = hosting
+        popover.behavior = .transient
+        popover.animates = true
         self.popover = popover
 
         // Observe pulse state to update status item icon
@@ -64,12 +65,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
         } else {
             controller.refreshAll()
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
-            let edge: NSRectEdge = button.isFlipped ? .maxY : .minY
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
-            if let window = popover.contentViewController?.view.window {
-                window.makeKeyAndOrderFront(nil)
-            }
         }
     }
 
