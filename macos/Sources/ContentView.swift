@@ -39,7 +39,7 @@ public struct ContentView: View {
             footerView
         }
         .padding(12)
-        .frame(width: 320, alignment: .top)
+        .frame(width: 320)
         .background(CogniTheme.bgDeep)
         .foregroundColor(CogniTheme.textPrimary)
         .animation(.easeInOut(duration: 0.18), value: controller.selectedTab)

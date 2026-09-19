@@ -16,20 +16,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
             button.image = CogniLogo.statusImage(pulse: .idle)
-            button.imagePosition = .imageOnly
             button.target = self
             button.action = #selector(statusItemClicked(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
 
-        // Configure Popover
+        // Configure Popover with dynamic sizing matching SwiftUI intrinsic content
         let popover = NSPopover()
         let hosting = NSHostingController(
             rootView: ContentView(controller: controller, onQuit: {
                 NSApp.terminate(nil)
             })
         )
-        hosting.preferredContentSize = CGSize(width: 320, height: 320)
+        hosting.sizingOptions = [.preferredContentSize]
         popover.contentViewController = hosting
         popover.behavior = .transient
         popover.animates = true
@@ -61,8 +60,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.performClose(nil)
         } else {
             controller.fetchConfig()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            let edge: NSRectEdge = button.isFlipped ? .maxY : .minY
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
+            if let window = popover.contentViewController?.view.window {
+                window.makeKeyAndOrderFront(nil)
+            }
             NSApp.activate(ignoringOtherApps: true)
         }
     }
