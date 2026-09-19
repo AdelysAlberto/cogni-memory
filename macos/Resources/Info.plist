@@ -5,13 +5,13 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>es</string>
     <key>CFBundleExecutable</key>
-    <string>CogniBar</string>
+    <string>Cogni</string>
     <key>CFBundleIdentifier</key>
     <string>com.adelys.cognibar</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>CogniBar</string>
+    <string>Cogni</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

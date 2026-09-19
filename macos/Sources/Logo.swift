@@ -1,17 +1,12 @@
 import AppKit
 
 public enum CogniLogo {
-    public enum PulseState {
+    public enum PulseState: Equatable {
         case idle
-        case activePulse(ColorMode)
+        case activePulse
     }
 
-    public enum ColorMode {
-        case cyan      // Saved memory / normal activity
-        case orange    // Vacuum / warning
-    }
-
-    /// Renders the 18x18 Status Bar Icon
+    /// Renders the 20x18 Status Bar Icon
     public static func statusImage(pulse: PulseState = .idle) -> NSImage {
         let size = NSSize(width: 20, height: 18)
         let img = NSImage(size: size, flipped: false) { rect in
@@ -19,17 +14,8 @@ public enum CogniLogo {
 
             ctx.saveGState()
 
-            let isPulsing: Bool
-            let pulseColor: NSColor
-            switch pulse {
-            case .idle:
-                isPulsing = false
-                pulseColor = .clear
-            case .activePulse(let mode):
-                isPulsing = true
-                pulseColor = (mode == .cyan) ? NSColor(red: 0.0, green: 0.898, blue: 1.0, alpha: 1.0) :
-                                               NSColor(red: 1.0, green: 0.42, blue: 0.0, alpha: 1.0)
-            }
+            let isPulsing = (pulse == .activePulse)
+            let pulseColor = NSColor(red: 0.0, green: 0.898, blue: 1.0, alpha: 1.0) // electricCyan
 
             let strokeColor: NSColor = isPulsing ? pulseColor : .labelColor
             ctx.setStrokeColor(strokeColor.cgColor)
@@ -37,13 +23,13 @@ public enum CogniLogo {
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
 
-            // Draw left neural arc
+            // Left neural arc
             let leftArc = CGMutablePath()
             leftArc.addArc(center: CGPoint(x: 6.5, y: 9.0), radius: 4.5, startAngle: .pi * 0.4, endAngle: .pi * 1.6, clockwise: false)
             ctx.addPath(leftArc)
             ctx.strokePath()
 
-            // Draw right neural arc
+            // Right neural arc
             let rightArc = CGMutablePath()
             rightArc.addArc(center: CGPoint(x: 13.5, y: 9.0), radius: 4.5, startAngle: -.pi * 0.6, endAngle: .pi * 0.6, clockwise: false)
             ctx.addPath(rightArc)
@@ -59,7 +45,7 @@ public enum CogniLogo {
             if isPulsing {
                 ctx.setFillColor(pulseColor.cgColor)
                 ctx.fillEllipse(in: centerRect.insetBy(dx: -1.0, dy: -1.0))
-                
+
                 // Outer glow ring
                 ctx.setStrokeColor(pulseColor.withAlphaComponent(0.4).cgColor)
                 ctx.setLineWidth(1.0)
@@ -77,5 +63,3 @@ public enum CogniLogo {
         return img
     }
 }
-
-extension CogniLogo.PulseState: Equatable {}

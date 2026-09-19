@@ -52,7 +52,7 @@ public struct ContentView: View {
                 Circle()
                     .fill(CogniTheme.electricCyan.opacity(0.12))
                     .frame(width: 28, height: 28)
-                Image(nsImage: CogniLogo.statusImage(pulse: controller.pulseState))
+                Image(nsImage: CogniLogo.statusImage(pulse: .idle))
                     .renderingMode(.template)
                     .foregroundColor(CogniTheme.electricCyan)
             }
@@ -100,7 +100,7 @@ public struct ContentView: View {
     // MARK: - Navigation Tabs
     private var navigationTabsView: some View {
         HStack(spacing: 4) {
-            tabButton(title: "Estado", icon: "chart.bar.fill", index: 0)
+            tabButton(title: "Estado", icon: "brain", index: 0)
             tabButton(title: "Comandos", icon: "terminal.fill", index: 1)
             tabButton(title: "Actualizar", icon: "arrow.triangle.2.circlepath", index: 2, hasBadge: controller.updateAvailable)
         }
@@ -142,72 +142,57 @@ public struct ContentView: View {
     // MARK: - TAB 0: Estado
     private var statusTabView: some View {
         VStack(spacing: 10) {
-            heroCardView
-            storageCardView
+            actionsCardView
             harnessesCardView
         }
     }
 
-    private var heroCardView: some View {
+    private var actionsCardView: some View {
         VStack(spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("TOKENS AHORRADOS")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(CogniTheme.textDim)
-                    
-                    let tokens = controller.stats?.totalTokensSaved ?? 0
-                    Text(controller.formatNumber(tokens))
-                        .font(.system(size: 20, weight: .heavy, design: .rounded))
-                        .foregroundColor(CogniTheme.electricCyan)
-                }
-                Spacer()
-
-                if let usd = controller.stats?.totalReasoningSavedUSD, usd > 0 {
-                    VStack(alignment: .trailing, spacing: 2) {
-                        Text("RAZONAMIENTO")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(CogniTheme.textDim)
-                        Text(String(format: "$%.3f", usd))
-                            .font(.system(size: 14, weight: .bold, design: .monospaced))
-                            .foregroundColor(CogniTheme.textPrimary)
+            // Main action: Open Web UI
+            Button(action: { controller.openWebUI() }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 13, weight: .semibold))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Abrir Web UI")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Dashboard de memoria y proyectos")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundColor(CogniTheme.electricCyan.opacity(0.7))
                     }
+                    Spacer()
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 10, weight: .semibold))
                 }
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(CogniTheme.electricCyan.opacity(0.12))
+                .foregroundColor(CogniTheme.electricCyan)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(CogniTheme.electricCyan.opacity(0.3), lineWidth: 1)
+                )
             }
+            .buttonStyle(PlainButtonStyle())
 
             Divider()
                 .background(CogniTheme.border)
 
+            // Secondary actions row
             HStack(spacing: 8) {
-                Button(action: { controller.openWebUI() }) {
-                    HStack(spacing: 5) {
-                        Image(systemName: "globe")
-                            .font(.system(size: 11, weight: .semibold))
-                        Text("Abrir Web UI")
-                            .font(.system(size: 11, weight: .semibold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6)
-                    .background(CogniTheme.electricCyan.opacity(0.15))
-                    .foregroundColor(CogniTheme.electricCyan)
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(CogniTheme.electricCyan.opacity(0.3), lineWidth: 1)
-                    )
-                }
-                .buttonStyle(PlainButtonStyle())
-
                 Button(action: { controller.cleanAndVacuum() }) {
                     HStack(spacing: 5) {
                         Image(systemName: "sparkles")
                             .font(.system(size: 11, weight: .semibold))
-                        Text(controller.isCleaning ? "Limpiando..." : "Optimizar")
+                        Text(controller.isCleaning ? "Optimizando..." : "Optimizar BD")
                             .font(.system(size: 11, weight: .semibold))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6)
-                    .background(CogniTheme.volcanicOrange.opacity(0.15))
+                    .background(CogniTheme.volcanicOrange.opacity(0.12))
                     .foregroundColor(CogniTheme.volcanicOrange)
                     .cornerRadius(6)
                     .overlay(
@@ -217,60 +202,17 @@ public struct ContentView: View {
                 }
                 .buttonStyle(PlainButtonStyle())
                 .disabled(controller.isCleaning)
-            }
-        }
-        .padding(10)
-        .background(CogniTheme.bgCard)
-        .cornerRadius(10)
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(CogniTheme.border, lineWidth: 1)
-        )
-    }
 
-    private var storageCardView: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("Base de Datos")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(CogniTheme.textSecondary)
-                Spacer()
-                if let sizeBytes = controller.stats?.dbSizeBytes {
-                    Text(controller.formatBytes(sizeBytes))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundColor(CogniTheme.textDim)
-                }
-            }
-
-            HStack(spacing: 12) {
-                let total = controller.stats?.totalMemories ?? 0
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("\(total)")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundColor(CogniTheme.textPrimary)
-                    Text("Firmas activas")
+                if !controller.statusMessage.isEmpty && controller.statusMessage != "Listo" {
+                    Text(controller.statusMessage)
                         .font(.system(size: 9, weight: .medium))
                         .foregroundColor(CogniTheme.textDim)
-                }
-
-                Spacer()
-
-                if let cats = controller.stats?.categories, !cats.isEmpty {
-                    HStack(spacing: 4) {
-                        ForEach(Array(cats.keys.prefix(3)), id: \.self) { cat in
-                            Text(cat)
-                                .font(.system(size: 8, weight: .bold))
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 2)
-                                .background(CogniTheme.cobaltRoyal.opacity(0.18))
-                                .foregroundColor(CogniTheme.textSecondary)
-                                .cornerRadius(4)
-                        }
-                    }
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
         }
-        .padding(10)
+        .padding(12)
         .background(CogniTheme.bgCard)
         .cornerRadius(10)
         .overlay(
@@ -281,9 +223,9 @@ public struct ContentView: View {
 
     private var harnessesCardView: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Arneses de IA Conectados")
-                .font(.system(size: 10, weight: .bold))
-                .foregroundColor(CogniTheme.textSecondary)
+            Text("ARNESES DE IA CONECTADOS")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(CogniTheme.textDim)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 5) {
@@ -297,7 +239,7 @@ public struct ContentView: View {
                                 .foregroundColor(CogniTheme.textPrimary)
                         }
                         .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
+                        .padding(.vertical, 4)
                         .background(CogniTheme.bgCardHover)
                         .cornerRadius(6)
                         .overlay(
@@ -317,7 +259,7 @@ public struct ContentView: View {
         )
     }
 
-    // MARK: - TAB 1: Comandos Útiles
+    // MARK: - TAB 1: Comandos
     private var commandsTabView: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("COMANDOS FRECUENTES")
@@ -516,10 +458,9 @@ public struct ContentView: View {
         )
     }
 
-    // MARK: - Footer View
+    // MARK: - Footer
     private var footerView: some View {
         HStack {
-            // Global Hotkey Badge
             HStack(spacing: 3) {
                 Text("Atajo:")
                     .font(.system(size: 9, weight: .medium))
@@ -535,7 +476,6 @@ public struct ContentView: View {
 
             Spacer()
 
-            // Quit Button
             Button(action: onQuit) {
                 Text("Salir")
                     .font(.system(size: 10, weight: .medium))

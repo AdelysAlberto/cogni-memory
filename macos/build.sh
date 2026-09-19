@@ -5,7 +5,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-APP_NAME="CogniBar"
+APP_NAME="Cogni"
 BUILD_DIR="$SCRIPT_DIR/build"
 APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
@@ -23,7 +23,6 @@ SWIFT_SOURCES=(
     "Sources/Theme.swift"
     "Sources/Logo.swift"
     "Sources/Shell.swift"
-    "Sources/DBWatcher.swift"
     "Sources/HotKey.swift"
     "Sources/Controller.swift"
     "Sources/ContentView.swift"

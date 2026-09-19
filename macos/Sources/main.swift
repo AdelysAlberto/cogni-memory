@@ -1,6 +1,5 @@
 import AppKit
 import SwiftUI
-import Combine
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,7 +7,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private var controller: CogniController!
     private var hotKey: GlobalHotKey!
-    private var cancellables = Set<AnyCancellable>()
+
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         controller = CogniController()
@@ -35,13 +34,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.animates = true
         self.popover = popover
 
-        // Observe pulse state to update status item icon
-        controller.$pulseState
-            .sink { [weak self] state in
-                guard let self = self, let button = self.statusItem.button else { return }
-                button.image = CogniLogo.statusImage(pulse: state)
-            }
-            .store(in: &cancellables)
+        // Static icon - no observers needed
+        if let button = statusItem.button {
+            button.image = CogniLogo.statusImage(pulse: .idle)
+        }
 
         // Register Global HotKey (⌥⌘C)
         hotKey = GlobalHotKey { [weak self] in
@@ -68,7 +64,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            controller.refreshAll()
+            controller.fetchConfig()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
