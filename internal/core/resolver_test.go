@@ -24,3 +24,23 @@ func TestEstimateTokens(t *testing.T) {
 		t.Errorf("Expected 2 tokens for 8 chars, got %d", tokens)
 	}
 }
+
+func TestCleanProjectName(t *testing.T) {
+	if cleanProjectName("/") != "" {
+		t.Errorf("Expected '/' to be cleaned to empty string, got %s", cleanProjectName("/"))
+	}
+	if cleanProjectName(".") != "" {
+		t.Errorf("Expected '.' to be cleaned to empty string, got %s", cleanProjectName("."))
+	}
+	if cleanProjectName("  ") != "" {
+		t.Errorf("Expected whitespace to be cleaned to empty string, got %s", cleanProjectName("  "))
+	}
+	if cleanProjectName("my-app") != "my-app" {
+		t.Errorf("Expected 'my-app', got %s", cleanProjectName("my-app"))
+	}
+
+	tags := FormatTags("auth", "/")
+	if strings.Contains(tags, "/") {
+		t.Errorf("FormatTags must not include '/' as a tag, got %s", tags)
+	}
+}

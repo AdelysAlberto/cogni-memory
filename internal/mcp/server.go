@@ -209,6 +209,10 @@ func (s *Server) getToolsList() []Tool {
 						Description: "Filtrar por categoría (bugfix, architecture, decision, discovery, config, pattern, preference, general).",
 						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
 					},
+					"all_projects": {
+						Type:        "boolean",
+						Description: "Buscar en todos los proyectos ignorando el filtro del proyecto actual (por defecto: false).",
+					},
 					"limit": {
 						Type:        "integer",
 						Description: "Límite máximo de resultados (por defecto: 5).",
@@ -436,10 +440,11 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 	switch name {
 	case "cogni_search":
 		var args struct {
-			Query    string `json:"query"`
-			Project  string `json:"project"`
-			Category string `json:"category"`
-			Limit    int    `json:"limit"`
+			Query       string `json:"query"`
+			Project     string `json:"project"`
+			Category    string `json:"category"`
+			Limit       int    `json:"limit"`
+			AllProjects bool   `json:"all_projects"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
 			return "Error parseando argumentos: " + err.Error(), true
@@ -448,18 +453,33 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			args.Limit = 5
 		}
 		project := args.Project
-		if project == "" {
+		if project == "" && !args.AllProjects {
 			project = core.DetectProjectName()
+		}
+		if project == "/" || project == "." || project == "default_project" {
+			project = ""
 		}
 
 		var results []core.Memory
+		seen := make(map[int64]bool)
+
 		if localStorage != nil {
-			res, _ := localStorage.SearchMemories(project, args.Query, args.Category, args.Limit)
-			results = append(results, res...)
+			res, _ := localStorage.SearchMemoriesAdvanced(project, args.Query, args.Category, args.Limit, args.AllProjects)
+			for _, m := range res {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					results = append(results, m)
+				}
+			}
 		}
 		if globalStorage != nil && len(results) < args.Limit {
-			res, _ := globalStorage.SearchMemories(project, args.Query, args.Category, args.Limit-len(results))
-			results = append(results, res...)
+			res, _ := globalStorage.SearchMemoriesAdvanced(project, args.Query, args.Category, args.Limit-len(results), args.AllProjects)
+			for _, m := range res {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					results = append(results, m)
+				}
+			}
 		}
 
 		if len(results) == 0 {

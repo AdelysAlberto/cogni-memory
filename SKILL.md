@@ -61,24 +61,18 @@ To prevent context inflation and avoid re-analyzing codebases:
 - **`preference`**: User preference or technical constraint learned during the session.
 - **`session`**: End-of-session or post-compaction milestone summaries.
 
-### 3. High-Density Synthetic Signature Format (What / Why / Where / Learned)
+### 3. High-Density Synthetic Signature Format (Engram & What/Why/Where/Learned)
 Cogni is designed to eliminate context saturation by replacing 500-line file reads with High-Density Synthetic Signatures occupying under 5% of tokens:
 
-- **Topic**: Hierarchical key (`<domain>/<subdomain>/<topic>`, e.g., `standards/i18n/ui`, `arch/auth/jwt`).
-- **What**: One concise sentence — what was done or decided.
-- **Why**: Motivation or root cause.
-- **Where**: Affected relative files or paths.
-- **Learned**: Non-obvious gotchas or learnings (omit if none).
-
-*Format in signature*: `What: ... | Why: ... | Where: ... | Learned: ...`
+- **Format A: Machine-Actionable Engram (Optimal for AI reasoning reuse on bugs & architecture)**:
+  `Trigger: <symptom/error/pattern> | Invariant: <root technical rule> | Recipe: <exact code/action pattern> | Antipattern: <what NOT to do>`
+- **Format B: Structured Synthetic Signature (Standard)**:
+  `What: <action/decision> | Why: <motivation/root cause> | Where: <paths/files> | Learned: <gotchas/insights>`
 
 ```yaml
-# Ideal Cogni Signature Example:
-Topic: standards/i18n/ui
-What: Todo texto visible en JSX/TSX debe usar t('namespace:key'). Prohibido texto literal.
-Why: Estándar global del proyecto para soporte multi-idioma (es, en, pt, fr, ar).
-Where: src/providers/i18n/, src/modules/*, src/layouts/
-Learned: Cadenas en toast o modales también deben internacionalizarse.
+# Ideal Machine Engram Example:
+Topic: architecture/navigation/ios-modals
+Summary: Trigger: Modal stacking error on iOS | Invariant: RCTModalHostViewController cannot stack modals | Recipe: Convert screens to Stack.Screen routes and use local CustomAlert inside modals | Antipattern: Never nest full screens inside <Modal>
 ```
 
 ### 4. Diagnostic & Maintenance Tooling

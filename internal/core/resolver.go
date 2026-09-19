@@ -8,14 +8,22 @@ import (
 	"strings"
 )
 
+func cleanProjectName(name string) string {
+	cleaned := strings.TrimSpace(name)
+	if cleaned == "" || cleaned == "/" || cleaned == "." || cleaned == "\\" {
+		return ""
+	}
+	return cleaned
+}
+
 // DetectProjectName inspects the workspace to determine the current project identifier
 func DetectProjectName() string {
 	// 1. Try git root directory name
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 	if out, err := cmd.Output(); err == nil {
 		gitRoot := strings.TrimSpace(string(out))
-		if gitRoot != "" {
-			return filepath.Base(gitRoot)
+		if cleaned := cleanProjectName(filepath.Base(gitRoot)); cleaned != "" {
+			return cleaned
 		}
 	}
 
@@ -24,8 +32,10 @@ func DetectProjectName() string {
 		var pkg struct {
 			Name string `json:"name"`
 		}
-		if err := json.Unmarshal(data, &pkg); err == nil && pkg.Name != "" {
-			return pkg.Name
+		if err := json.Unmarshal(data, &pkg); err == nil {
+			if cleaned := cleanProjectName(pkg.Name); cleaned != "" {
+				return cleaned
+			}
 		}
 	}
 
@@ -37,14 +47,18 @@ func DetectProjectName() string {
 			if strings.HasPrefix(trimmed, "module ") {
 				modName := strings.TrimSpace(strings.TrimPrefix(trimmed, "module "))
 				parts := strings.Split(modName, "/")
-				return parts[len(parts)-1]
+				if cleaned := cleanProjectName(parts[len(parts)-1]); cleaned != "" {
+					return cleaned
+				}
 			}
 		}
 	}
 
 	// 4. Fallback to current working directory name
 	if cwd, err := os.Getwd(); err == nil {
-		return filepath.Base(cwd)
+		if cleaned := cleanProjectName(filepath.Base(cwd)); cleaned != "" {
+			return cleaned
+		}
 	}
 
 	return "default_project"
@@ -114,7 +128,7 @@ func FormatTags(tags string, projectName string) string {
 
 	// Add project tag if valid
 	projectTag := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(projectName), " ", "-"))
-	if projectTag != "" && projectTag != "global" && projectTag != "default_project" {
+	if projectTag != "" && projectTag != "global" && projectTag != "default_project" && projectTag != "/" && projectTag != "." {
 		seen[projectTag] = true
 		cleanParts = append(cleanParts, projectTag)
 	}

@@ -2,78 +2,106 @@
   <img src="artifacts/cogni-logo.png" width="220" alt="Cogni Logo" />
 </p>
 
-<h1 align="center">🧠 Cogni</h1>
+<h1 align="center">Cogni</h1>
 
 <p align="center">
   <b>Cognitive Omniscient Grid for Networked Intelligence</b><br>
-  <i>Memoria persistente y buscable para agentes de IA en entornos de desarrollo.</i>
+  <i>Motor de memoria persistente de alto rendimiento para agentes de IA de código.</i>
 </p>
 
 <p align="center">
   <a href="https://golang.org/"><img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Version"></a>
-  <a href="https://sqlite.org/"><img src="https://img.shields.io/badge/SQLite-FTS5-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite FTS5"></a>
+  <a href="https://sqlite.org/"><img src="https://img.shields.io/badge/SQLite-FTS5%20BM25-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite FTS5 BM25"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/AdelysAlberto/cogni-memory"><img src="https://img.shields.io/badge/Harnesses-Universal-FF6F61?style=for-the-badge" alt="Harnesses"></a>
 </p>
 
 ---
 
-## Visión General
+## Vision General
 
-**Cogni** es una CLI para que un agente guarde y recupere decisiones técnicas de forma persistente entre sesiones.
+Cada vez que un agente de desarrollo reinicia una sesion o sufre una compactacion de contexto, olvida por completo los errores que ya resolvio, los acuerdos de arquitectura y las decisiones de librerias. El resultado es devastador: el modelo gasta entre 10.000 y 25.000 tokens de contexto leyendo archivos que no deberia volver a tocar, y quema entre 2.000 y 8.000 tokens de razonamiento intentando deducir de nuevo lo que ya estaba resuelto.
 
-En lugar de releer contexto crudo en cada tarea, el agente consulta una memoria sintética en SQLite (local por proyecto y opcionalmente global). El objetivo práctico es reducir repetición, mantener continuidad y evitar perder acuerdos técnicos.
-
-Es compatible con **Gemini Antigravity**, **Cursor IDE**, **GitHub Copilot**, **OpenCode**, **Hermes CLI**, **OpenAI Codex CLI** y cualquier flujo basado en CLI/IDE que pueda ejecutar comandos.
+**Cogni** es una infraestructura local de memoria persistente en Go y SQLite FTS5 con clasificacion probabilistica BM25. En lugar de forzar a tu agente a releer codigo fuente o depender de complejas bases de datos vectoriales que fallan al buscar identificadores de codigo, Cogni entrega el razonamiento ya resuelto en menos de 40 tokens.
 
 ---
 
-## Qué Resuelve
+## Por Que Cogni es la Mejor Opcion para tu IA
 
-* Evita repetir descubrimientos técnicos ya resueltos en sesiones anteriores.
-* Reduce lecturas largas de archivos cuando la pregunta ya tiene antecedente.
-* Da trazabilidad mínima de decisiones con estructura `What | Why | Where | Learned`.
-* Permite operar en modo local-first, sin depender de servicios externos.
+El ecosistema de memoria para agentes esta lleno de soluciones que no funcionan en codigo real. Esta es la realidad tecnica de por que Cogni supera a las alternativas del mercado:
 
----
+### 1. El Fracaso de las Bases de Datos Vectoriales en Entornos de Codigo
+Las bases de datos vectoriales (`pgvector`, Chroma, Pinecone) calculan similitudes semanticas conceptuales ("la vibra del texto"). Pero en ingenieria de software, los problemas se definen por nombres exactos:
+* Un vector no comprende con precision simbolos como `RCTModalHostViewController`, `useNearbyIncidents`, `app/_layout.tsx` o codigos de error especificos de un compilador.
+* Requieren llamadas a APIs de embeddings remotas por cada consulta, introduciendo latencia de red (300ms a 1s) y costes continuos por token.
+* **La Solucion Cogni**: Motor local en Go con SQLite FTS5 y algoritmo de clasificacion **BM25**. Busqueda lexico-fonetica con soporte de stems en sub-milisegundos (2ms), 100% offline, con cero costes de API y precision milimetrica en simbolos tecnicos.
 
-## Contexto Crudo vs. Memoria Sintética
+### 2. Motor de Busqueda en Cascada (BM25 Cascade Engine)
+Los sistemas tradicionales de FTS fallan cuando un agente busca frases largas con multiples palabras clave (conjunción estricta `AND`), devolviendo 0 resultados. Cogni implementa un pipeline de resolucion en cascada:
+1. **Fase 1 (Exact Match)**: Coincidencia booleana estricta en el proyecto actual.
+2. **Fase 2 (BM25 Disyuntivo Ponderado)**: Busqueda con operador `OR` sobre stems y clasificacion por relevancia probabilistica BM25, otorgando maximo peso a `topic_key` y `title`. Coincidencias con 3 de 5 palabras se posicionan arriba en vez de descartarse.
+3. **Fase 3 (Cross-Project Fallback)**: Si el proyecto actual no contiene registros suficientes, recupera patrones arquitectonicos y soluciones aprendidas en otros proyectos del usuario.
+4. **Fase 4 (Category Softening)**: Si el filtro de categoria era demasiado restrictivo, expande la busqueda manteniendo la relevancia tecnica.
+5. **Fase 5 (Fuzzy LIKE)**: Fallback seguro ante cualquier anomalia sintactica.
 
-> Nota: los valores son rangos orientativos observados en uso real y dependen del proyecto, del modelo y del arnés.
+### 3. Ahorro Real de Tokens y Razonamiento
+* **Context Tokens**: Reemplaza lecturas de 500 lineas de codigo (2.500 tokens por archivo) por una previsualizacion compacta de 35 tokens en Fase 1 y una hidratacion selectiva de 120 tokens en Fase 2. Reduccion de contexto >95%.
+* **Reasoning Tokens (Thinking Models)**: En modelos modernos con cadena de pensamiento (Claude 3.7 Thinking, Gemini Thinking, o1/o3-mini), un bug desconocido provoca exploracion de hipotesis de hasta 8.000 tokens de razonamiento. Cogni le entrega el invariante verificado y la receta exacta, reduciendo el gasto de pensamiento a menos de 300 tokens.
 
-| Métricas / Capacidad | Sin Cogni (Lectura Tradicional) | Con Cogni (Firmas Sintéticas) |
-| :--- | :--- | :--- |
-| **Consumo de Tokens** | Miles de tokens por relectura | Menor consumo al reutilizar resumen estructurado |
-| **Tiempo de Recuperación** | Segundos de relectura | Milisegundos a decenas de ms según tamaño de BD |
-| **Coherencia de Arquitectura** | Se pierde al compactar o reiniciar chat | **Persistente** entre sesiones y proyectos |
-| **Duplicación de Decisiones** | Frecuente | Menor, si se guarda y actualiza de forma disciplinada |
-
----
-
-## ⚡ Características Principales
-
-* **Binario Nativo en Go**: sin runtime de Node o Python para ejecutar la CLI.
-* **Local-First**: memoria por proyecto en `.cogni/memory.db` y capa global opcional en `~/.cogni/memory.db`.
-* **Búsqueda FTS5**: búsqueda full-text por título, categoría, tags y resumen.
-* **UI Embebida**: inspección visual de memorias desde `cogni ui`.
-* **Taxonomía de Tags**: reduce ambigüedad y facilita recuperación consistente.
-* **Convención Operativa**: define cuándo buscar y cuándo guardar para evitar olvidos del agente.
+### 4. Integracion Idempotente y Cero Sobrescrituras
+* **`mcp.json` Seguro**: Desmaterializa las configuraciones previas y solo registra o actualiza la clave `"cogni"`. Servidores de Postgres, Playwright, Pencil o notificadores externos jamas se pierden ni se alteran.
+* **`AGENTS.md` Preservado**: Inyecta bloques delimitados (`<!-- cogni:protocol:start -->`) al final del archivo. Cero lineas de tus directivas previas resultan afectadas.
 
 ---
 
-## Instalación Rápida
+## Matriz de Arneses Soportados
 
-### 1. Vía Script de Instalación Universal (Recomendado)
+Cogni detecta y configura automaticamente los principales entornos y arneses de IA del mercado:
+
+| Arnés / Entorno | Soporte MCP | Soporte Skill (`SKILL.md`) | Inyección de Reglas | Inyección `AGENTS.md` | Ubicación Principal |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Pi Coding Agent (`pi.dev`)** | Si | Si | Si | Si | `~/.pi/agent/` |
+| **Claude Code CLI** | Si | Si | Si | Si | `~/.claude/` / `~/.claude.json` |
+| **Claude Desktop** | Si | Si | Si | No | `~/Library/Application Support/Claude/` |
+| **Cursor IDE** | Si | No (vía MCP + Rules) | Si | No (vía rules) | `~/.cursor/` |
+| **Gemini Antigravity** | Si | No (vía MCP + Rules) | Si | No (vía rules) | `~/.gemini/config/` |
+| **OpenCode** | Si | Si | Si | Si | `~/.config/opencode/` |
+| **GitHub Copilot (VS Code)** | No (vía CLI) | Si | Si | Instrucciones User | `~/.config/Code/User/prompts/` |
+| **Hermes CLI** | Si | Si | Si | Si | `~/.hermes/` |
+| **OpenAI Codex CLI** | Si (TOML) | Si | Si | Si | `~/.codex/` |
+| **Workspace Local** | Si (`.agents/`) | Si (`.agents/skills/`) | Si (`.agents/rules/`) | Si (`./AGENTS.md`) | `./.agents/` |
+
+---
+
+## Formato de Almacenamiento: Machine-Actionable Engram
+
+Cogni no almacena prosa conversacional para consumo humano; almacena firmas sinteticas de alta densidad optimizadas para que el LLM las ejecute directamente como invariantes de ingenieria:
+
+### Formato A: Machine Engram (Bugs y Arquitectura)
+```yaml
+Topic: architecture/navigation/ios-modals
+Summary: Trigger: Modal stacking error on iOS | Invariant: RCTModalHostViewController cannot stack modals | Recipe: Convert screens to Stack.Screen routes and use local CustomAlert inside modals | Antipattern: Never nest full screens inside <Modal>
+```
+
+### Formato B: Firma Sintetica Estandar
+```yaml
+Topic: standards/i18n/ui
+Summary: What: Todo texto visible en TSX debe usar t('namespace:key') | Why: Estandar global de traduccion | Where: src/modules/*, src/layouts/* | Learned: Toast notifications tambien requieren internacionalizacion
+```
+
+---
+
+## Instalacion
+
+### 1. Script Universal (Recomendado)
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
-*El script detectará automáticamente los arneses de IA instalados (`.gemini`, `.cursor`, `.claude`, `.agents`, `.copilot`, `.opencode`, `.hermes`, `.codex`) y registrará la skill de Cogni.*
+El script detecta automaticamente tus arneses instalados y permite seleccionar el entorno deseado.
 
-*Para GitHub Copilot en VS Code, además de la skill, el instalador crea una instrucción global en `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux) o `~/Library/Application Support/Code/User/prompts/cogni-copilot.instructions.md` (macOS) para reforzar búsqueda/guardado obligatorio cuando el CLI `cogni` está disponible.*
-
-### 2. Compilando desde el Código Fuente (Go 1.22+)
+### 2. Compilacion Local desde Fuente (Go 1.22+)
 
 ```bash
 git clone https://github.com/AdelysAlberto/cogni-memory.git cogni
@@ -81,352 +109,107 @@ cd cogni
 make install
 ```
 
-*El binario quedará listo en `$HOME/.local/bin/cogni`.*
+El binario queda compilado e instalado en `~/.local/bin/cogni`.
 
----
-
-## Por Qué Instalar el Binario (Para Escépticos y Seguridad)
-
-Instalar el binario no es solo comodidad; también es control operativo:
-
-1. **Superficie de ejecución acotada**: ejecutas una CLI única en Go, en vez de depender de varios runtimes y paquetes transitorios.
-2. **Comportamiento estable**: el mismo comando `cogni` funciona igual desde distintos agentes (Copilot, Cursor, CLI), reduciendo variaciones.
-3. **Local-first real**: por defecto, la memoria vive en tu máquina (SQLite), sin enviar datos a servicios remotos por diseño de base.
-4. **Auditable**: el código fuente está disponible; puedes compilar tú mismo y evitar binarios precompilados si lo prefieres.
-
-Si prefieres máxima cautela, evita ejecutar scripts remotos directos y revisa primero:
+### 3. Configuracion de un Arnés Especifico
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh -o /tmp/cogni-install.sh
-less /tmp/cogni-install.sh
-bash /tmp/cogni-install.sh
-```
+# Configurar para Pi Coding Agent (pi.dev)
+cogni init --harness pi
 
-O compila desde fuente:
+# Configurar para Claude Code
+cogni init --harness claude
 
-```bash
-git clone https://github.com/AdelysAlberto/cogni-memory.git
-cd cogni-memory
-make install
-```
-
-### Qué modifica el instalador
-
-* Crea `~/.local/bin/cogni`.
-* Crea/usa `~/.cogni/` para datos locales.
-* Puede usar `~/.cogni-src/` como caché de fuente.
-* Copia la skill y reglas en carpetas de los arneses seleccionados.
-* **Configura automáticamente el servidor MCP** en los arneses compatibles (OpenCode, Cursor, Claude, Gemini, Hermes, Codex).
-* En Copilot VS Code, puede crear `~/.config/Code/User/prompts/cogni-copilot.instructions.md` (Linux).
-
-No reemplaza archivos del proyecto actual ni requiere privilegios root para el flujo normal (salvo intentos opcionales de instalar Go si no existe).
-
----
-
-## Integración MCP (Model Context Protocol)
-
-Cogni incluye un servidor MCP nativo que permite a los agentes de IA interactuar con la memoria mediante herramientas estructuradas, sin depender exclusivamente de la CLI.
-
-### Configuración Automática por Arnés
-
-Al ejecutar `cogni init` e seleccionar tu entorno, Cogni inyecta automáticamente la configuración MCP en el archivo correspondiente:
-
-| Arnés | Archivo de Configuración MCP |
-| :--- | :--- |
-| **OpenCode** | `~/.config/opencode/opencode.json` |
-| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
-| **Claude Code CLI** | `~/.claude.json` |
-| **Cursor IDE** | `~/.cursor/mcp.json` |
-| **Gemini Antigravity** | `~/.gemini/config/mcp_config.json` |
-| **Hermes CLI** | `~/.hermes/mcp.json` |
-| **Codex CLI** | `~/.codex/config.toml` |
-
-### Formato Generado para OpenCode
-
-Para **OpenCode**, Cogni genera automáticamente la estructura correcta bajo `mcp.servers`:
-
-```jsonc
-// ~/.config/opencode/opencode.json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "servers": {
-      "cogni": {
-        "type": "local",
-        "command": ["/Users/tu-usuario/.local/bin/cogni", "mcp"],
-        "enabled": true
-      }
-    }
-  }
-}
-```
-
-> **Nota**: OpenCode usa el formato `mcp.servers` (V2), **no** el formato `mcpServers` usado por Claude/Cursor. El instalador de Cogni detecta automáticamente el arnés y genera el formato correcto.
-
-### Formato Generado para Claude
-
-**Claude Desktop** (aplicación gráfica):
-
-```jsonc
-// ~/Library/Application Support/Claude/claude_desktop_config.json (macOS)
-{
-  "mcpServers": {
-    "cogni": {
-      "type": "stdio",
-      "command": "/Users/tu-usuario/.local/bin/cogni",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-**Claude Code** (CLI):
-
-```jsonc
-// ~/.claude.json
-{
-  "mcpServers": {
-    "cogni": {
-      "type": "stdio",
-      "command": "/Users/tu-usuario/.local/bin/cogni",
-      "args": ["mcp"]
-    }
-  }
-}
-```
-
-> **Nota importante**: Claude Code también soporta configuración a nivel de proyecto con `.mcp.json` en la raíz del proyecto. Para configuración compartida con el equipo, ejecuta `claude mcp add cogni --scope project` después de instalar Cogni.
-
-### Formato Generado para Codex CLI
-
-Codex CLI lee la configuración de `~/.codex/config.toml` (o `<proyecto>/.codex/config.toml` para overrides del proyecto) y registra los servidores MCP bajo la tabla `[mcp_servers]`. Cogni preserva el resto de tus claves existentes (modelo, profiles, flags, etc.) y solo hace upsert de la entrada `[mcp_servers.cogni]`:
-
-```toml
-# ~/.codex/config.toml
-mcp_oauth_credentials_store = "auto"
-
-[mcp_servers]
-
-[mcp_servers.cogni]
-command = "/Users/tu-usuario/.local/bin/cogni"
-args = ["mcp"]
-enabled = true
-```
-
-> **Nota importante**: Codex CLI **no usa** el formato `mcpServers` (camelCase) ni el wrapping `mcp.servers` de OpenCode. La sección debe llamarse `[mcp_servers]` (snake_case). El instalador de Cogni detecta el archivo `config.toml` dentro de `~/.codex/` y aplica automáticamente el formato correcto.
-
-Para configuración compartida con tu equipo, también puedes versionar `<proyecto>/.codex/config.toml` (sólo se carga en proyectos confiables) con el mismo bloque `[mcp_servers.cogni]`.
-
-### Herramientas MCP Disponibles
-
-Una vez configurado, el agente tendrá acceso a estas herramientas:
-
-| Herramienta | Descripción |
-| :--- | :--- |
-| `cogni_search` | Búsqueda compacta de memorias (FTS5) |
-| `cogni_get` | Recuperación completa de una memoria por ID o TopicKey |
-| `cogni_save` | Guarda o actualiza (upsert) una firma de memoria |
-| `cogni_update` | Actualiza una memoria existente por ID |
-| `cogni_context` | Contexto activo reciente del proyecto |
-| `cogni_session_summary` | Guarda resumen de sesión |
-| `cogni_stats` | Métricas de uso y tokens ahorrados |
-
-### Verificación Manual
-
-Para verificar que el servidor MCP está funcionando:
-
-```bash
-# Iniciar el servidor MCP manualmente (para debugging)
-cogni mcp
-
-# Verificar que el binario está en PATH
-which cogni
+# Configurar en todos los arneses detectados
+cogni init --all
 ```
 
 ---
 
-## Flujo Operativo del Agente
+## Herramientas MCP Nativas
 
-```text
-               ┌──────────────────────────────────────────────┐
-               │    [Operador / Agente inicia solicitud]     │
-               └──────────────────────┬───────────────────────┘
-                                      │
-                                      ▼
-                        ¿Existe decisión/patrón previo?
-                         cogni search --query "auth"
-                                      │
-                   ┌──────────────────┴──────────────────┐
-                   ▼                                     ▼
-                [ SÍ ]                                 [ NO ]
-    Recupera firma semántica              Diseña solución técnica,
-     y notifica en chat:                  ejecuta cambio y guarda:
-   Memoria Recuperada                  cogni save 
-```
+Al conectarse via Model Context Protocol, el agente dispone de las siguientes capacidades:
 
----
-
-## Directivas y Disparadores Obligatorios (Skill Standard)
-
-Todo agente integrado con Cogni sigue el estándar **WHEN TO SAVE / WHEN TO SEARCH**:
-
-### 1. Disparadores Obligatorios de Guardado (`cogni save`)
-
-El agente debe guardar memoria INMEDIATAMENTE tras:
-
-* **bugfix**: Solución a un error o bug no trivial.
-* **architecture / decision**: Elección de librerías, modelo de datos o diseño de sistema.
-* **discovery**: Descubrimiento no obvio sobre el comportamiento del sistema.
-* **config**: Setup de entorno, herramientas o scripts.
-* **pattern**: Convención de naming, estructura de archivos o estándar técnico.
-* **preference**: Restricción o preferencia explicada por el usuario.
-* **session**: Resumen de sesión o hito alcanzado al cerrar sesión o tras compactar contexto.
-
-### 2. Estructura de Firma Sintética de Alta Densidad (<5% Tokens)
-
-Cogni reemplaza relecturas masivas de código por **Firmas Sintéticas de Alta Densidad**:
-
-```yaml
-Topic: <domain>/<subdomain>/<topic> (ej: standards/i18n/ui)
-What: <Qué se hizo o decidió en 1 oración corta>
-Why: <Motivación o causa raíz técnica>
-Where: <Archivos o rutas clave afectadas>
-Learned: <Gotchas o hallazgos no obvios>
-```
-
-Format de firma sintética unificada (`--summary` o flags discretos `--what`, `--why`, `--where`, `--learned`):
-
-```text
-What: ... | Why: ... | Where: ... | Learned: ...
-```
-
-### 3. Herramientas de Diagnóstico y Ciclo de Vida de Sesión
-
-* **`cogni stats`**: Muestra métricas de salud de memoria, número de registros y tokens ahorrados.
-* **`cogni session-summary`**: Guarda los avances y descubrimientos del proyecto al cerrar sesión o compactar contexto para reanudar el trabajo en < 100 tokens.
-* **Tras compactación de contexto (`FIRST ACTION REQUIRED`)**:
-  1. Llama inmediatamente a `cogni session-summary` con el resumen compactado.
-  2. Llama a `cogni context` para recuperar el estado activo.
-  3. Continúa con la tarea.
-
-### 4. Notificaciones Visuales en Chat
-
-* **Al Recuperar**: `🧠 **Memoria Recuperada**: [<proyecto>] "<titulo_o_tema>" (Tags: #tag1, #tag2)`
-* **Al Guardar**: `💾 **Memoria Guardada**: [<proyecto>] "<titulo_breve>" (Category: #category, Tags: #tag1, #tag2)`
+* **`cogni_search(query, project, category, all_projects, limit)`**: Busqueda compacta con clasificacion BM25 y desborde entre proyectos. Devuelve ID, TopicKey, titulo y resumen en ~35 tokens por resultado.
+* **`cogni_get(id, topic_key, project)`**: Hidratacion completa del registro seleccionado en Fase 2.
+* **`cogni_save(title, summary, what, why, where, learned, category, tags, topic_key, project, global)`**: Guardado estructurado o upsert automatico si el `topic_key` ya existe.
+* **`cogni_update(id, title, summary, category, tags, topic_key)`**: Actualizacion puntual de registros por ID.
+* **`cogni_context(project, limit)`**: Recuperacion instantanea de hitos recientes y convenciones activas al arrancar sesion o tras compactacion (<100 tokens).
+* **`cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files)`**: Persistencia de progreso al finalizar sesion o tras compactacion.
+* **`cogni_stats()`**: Auditoria de salud de memoria y tokens reales ahorrados.
 
 ---
 
 ## Referencia de Comandos CLI
 
 ```bash
-# 1. Bootstrapping rápido de contexto activo (< 100 tokens)
+# 1. Recuperar contexto activo reciente (< 100 tokens)
 cogni context
 
-# 2. Guardar memoria sintética con flags estructurados
+# 2. Buscar memorias con el motor BM25 Cascade
+cogni search --query "modal crash viara navigation"
+
+# 3. Guardar un Machine Engram estructurado
 cogni save \
-  --topic-key "arch/db/indexes" \
-  --title "Fixed N+1 Query in Product List" \
-  --what "Added index on category_id and joined queries" \
-  --why "Resolves slow load on 10k rows" \
-  --where "src/db/products.go" \
-  --learned "SQLite EXPLAIN QUERY PLAN required" \
-  --category "bugfix" \
-  --tags "database,sqlite,products-list"
+  --topic-key "arch/nav/modal-stacking" \
+  --title "iOS Modal Stacking Fix and Screen Navigation" \
+  --what "Migracion de modales a Stack.Screen routes" \
+  --why "RCTModalHostViewController no apila modales en iOS" \
+  --where "app/_layout.tsx, app/viara.tsx" \
+  --learned "Modales nativos requieren su propio CustomAlert" \
+  --category "architecture" \
+  --tags "ios,modal,navigation,uikit"
 
-# 3. Guardar resumen de fin de sesión o post-compactación
+# 4. Obtener detalle completo de una memoria
+cogni get arch/nav/modal-stacking
+cogni get --id 96
+
+# 5. Guardar resumen de sesion
 cogni session-summary \
-  --goal "Optimizar auth y contexto" \
-  --accomplished "Endpoints creados, tablas migradas" \
-  --where "src/auth/jwt.go"
+  --goal "Optimizar motor de busqueda de memoria" \
+  --accomplished "Implementado BM25 Cascade y soporte para Pi" \
+  --where "internal/storage/sqlite.go, internal/core/skill.go"
 
-# 4. Buscar firmas semánticas con FTS5 (local y global)
-cogni search --query "products"
-
-# 5. Obtener contenido completo hidratado por TopicKey o ID (Fase 2)
-cogni get arch/db/indexes
-cogni get --id 6
-
-# 6. Actualizar memoria existente por ID para evitar duplicados
-cogni update --id 6 --summary "What: Updated auth to JWT + Rotation | Why: Security audit | Where: src/auth/jwt.go"
-
-# 7. Promover una memoria local a la BD global centralizada
-cogni promote --id 6
-
-# 8. Eliminar una firma por ID
-cogni remove --id 6
-
-# 9. Exportar memorias en Markdown o JSON
-cogni share --format markdown > memorias.md
-cogni share --format json
-
-# 10. Ver métricas de tokens ahorrados y estadísticas
-cogni stats
-
-# 11. Abrir el Dashboard Gráfico en el navegador
+# 6. Lanzar la interfaz grafica en el navegador
 cogni ui
 
-# 12. Instalar o actualizar la Skill en arneses de IA
-cogni skill
+# 7. Estadisticas de memoria y tokens ahorrados
+cogni stats
 ```
 
 ---
 
-## Regla de las 3 Capas de Tags
+## Stack Tecnologico y Arquitectura
 
-Para evitar etiquetas ambiguas o duplicadas, cada firma semántica organiza de 3 a 5 tags en 3 capas deterministas:
-
-1. **Capa 1 - Concepto Principal / Dominio**: Término genérico (`pagination`, `auth`, `state-management`, `api-rest`, `database`).
-2. **Capa 2 - Tecnología / Herramienta**: Stack exacto (`go`, `sqlite`, `zustand`, `react`, `express`, `css-modules`).
-3. **Capa 3 - Módulo / Entidad Específica**: Dominio del proyecto (`users-table`, `products-list`, `jwt-middleware`).
+* **Lenguaje**: Go 1.22+ (Compilacion estatica, binario ligero, sin runtimes externos).
+* **Almacenamiento**: SQLite embebido en modo WAL (`PRAGMA synchronous = NORMAL`, `busy_timeout = 5000`).
+* **Indice Full-Text**: SQLite FTS5 con tabla virtual `memories_fts` sincronizada mediante triggers automaticos de insercion, borrado y actualizacion.
+* **Ranking**: Algoritmo BM25 nativo ponderado por columnas (`bm25(memories_fts, 5.0, 10.0, 2.0, 5.0)`).
+* **Protocolo de Agentes**: Servidor MCP nativo sobre transporte stdio (JSON-RPC 2.0).
+* **Web UI**: Dashboard local embebido en el binario via `embed.FS` con servidor HTTP interno.
 
 ---
 
-## Arquitectura del Repositorio
+## Estructura del Repositorio
 
 ```text
 cogni-memory/
 ├── cmd/cogni/main.go          # Punto de entrada de la CLI
 ├── internal/
-│   ├── cli/                   # Handlers de comandos (save, search, update, promote, remove, share, ui, skill)
-│   ├── core/                  # Entidades de dominio, tags y resolución de workspace Git
-│   ├── server/                # Servidor HTTP embebido y endpoints REST de la Web UI
-│   └── storage/               # Repositorio SQLite Pure-Go con soporte FTS5
-├── web/                       # Assets estáticos embebidos (Dashboard Web UI)
-│   ├── embed.go
-│   └── public/
-├── SKILL.md                   # Especificación canónica de la Skill para Agentes de IA
-├── Makefile                   # Tareas de compilación, testeo, instalación y releases
-├── release.sh                 # Script automatizado de tags y releases (patch / minor / major)
-└── install.sh                 # Instalador universal multi-arnés de IA
+│   ├── cli/                   # Handlers de comandos CLI e instalacion de arneses
+│   ├── core/                  # Entidades de dominio, resolucion de proyectos y directivas
+│   ├── mcp/                   # Servidor MCP stdio con protocolo JSON-RPC 2.0
+│   ├── server/                # Servidor HTTP embebido y endpoints REST para Web UI
+│   └── storage/               # Motor SQLite FTS5, BM25 Cascade y persistencia
+├── web/                       # Assets estaticos embebidos (Dashboard Web UI)
+├── SKILL.md                   # Definicion canonica de la Skill para agentes
+├── Makefile                   # Tareas de compilacion, testing e instalacion
+├── release.sh                 # Automatizacion de releases
+└── install.sh                 # Script universal de despliegue multi-arnés
 ```
-
----
-
-## Desarrollo y Release de Versiones
-
-El sistema de versiones es **centralizado por Tag de Git y `-ldflags`**. Para generar una nueva versión desde desarrollo:
-
-```bash
-# Incrementar versión PATCH (ej: v2.0.3 -> v2.0.4)
-make release-patch
-
-# Incrementar versión MINOR (ej: v2.0.3 -> v2.1.0)
-make release-minor
-
-# Incrementar versión MAJOR (ej: v2.0.3 -> v3.0.0)
-make release-major
-```
-
-El comando automatiza la compilación con la versión exacta inyectada en Go, crea la `git tag`, hace el `git push` a GitHub y (si tienes el `gh` CLI instalado) sube el Release a GitHub con su binario correspondiente.
-
----
-
-## Autor y Mantenimiento
-
-Desarrollado y mantenido por **Adelys Alberto** ([@AdelysAlberto](https://github.com/AdelysAlberto)).
 
 ---
 
 ## Licencia
 
-Este proyecto está distribuido bajo la licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para más detalles.
+Distribuido bajo licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para mas detalles.

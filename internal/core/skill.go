@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -67,18 +68,15 @@ To prevent context inflation and avoid re-analyzing codebases:
 - **` + "`preference`" + `**: User preference or technical constraint learned during the session.
 - **` + "`session`" + `**: End-of-session or post-compaction milestone summaries.
 
-### 3. High-Density Synthetic Signature Format (What / Why / Where / Learned)
+### 3. High-Density Synthetic Signature Format (Engram & What/Why/Where/Learned)
 Cogni is designed to eliminate context saturation by replacing 500-line file reads with High-Density Synthetic Signatures occupying under 5% of tokens:
 
-- **Topic**: Hierarchical key (` + "`<domain>/<subdomain>/<topic>`" + `, e.g., ` + "`standards/i18n/ui`" + `, ` + "`arch/auth/jwt`" + `).
-- **What**: One concise sentence — what was done or decided.
-- **Why**: Motivation or root cause.
-- **Where**: Affected relative files or paths.
-- **Learned**: Non-obvious gotchas or learnings (omit if none).
+- **Format A: Machine-Actionable Engram (Optimal for AI reasoning reuse on bugs & architecture)**:
+  ` + "`Trigger: <symptom/error/pattern> | Invariant: <root technical rule> | Recipe: <exact code/action pattern> | Antipattern: <what NOT to do>`" + `
+- **Format B: Structured Synthetic Signature (Standard)**:
+  ` + "`What: <action/decision> | Why: <motivation/root cause> | Where: <paths/files> | Learned: <gotchas/insights>`" + `
 
-*Format in signature*: ` + "`What: ... | Why: ... | Where: ... | Learned: ...`" + `
-
-` + "```yaml\n# Ideal Cogni Signature Example:\nTopic: standards/i18n/ui\nWhat: Todo texto visible en JSX/TSX debe usar t('namespace:key'). Prohibido texto literal.\nWhy: Estándar global del proyecto para soporte multi-idioma (es, en, pt, fr, ar).\nWhere: src/providers/i18n/, src/modules/*, src/layouts/\nLearned: Cadenas en toast o modales también deben internacionalizarse.\n```" + `
+` + "```yaml\n# Ideal Machine Engram Example:\nTopic: architecture/navigation/ios-modals\nSummary: Trigger: Modal stacking error on iOS | Invariant: RCTModalHostViewController cannot stack modals | Recipe: Convert screens to Stack.Screen routes and use local CustomAlert inside modals | Antipattern: Never nest full screens inside <Modal>\n```" + `
 
 ### 4. Diagnostic & Maintenance Tooling
 - **` + "`cogni stats`" + ` / ` + "`cogni_stats()`" + `**: Displays memory health, entry count, and estimated token savings metrics.
@@ -177,6 +175,7 @@ func InstallRules(homeDir string, allowedHarnesses []string) error {
 		"claude":      filepath.Join(homeDir, ".claude", "rules"),
 		"opencode":    filepath.Join(homeDir, ".config", "opencode", "rules"),
 		"hermes":      filepath.Join(homeDir, ".hermes", "rules"),
+		"pi":          filepath.Join(homeDir, ".pi", "agent", "rules"),
 	}
 
 	harnessAllowed := func(h string) bool {
@@ -224,6 +223,102 @@ func InstallRules(homeDir string, allowedHarnesses []string) error {
 	return nil
 }
 
+// AgentDirectivesPrompt defines the concise, non-intrusive prompt block for AGENTS.md / CLAUDE.md
+const AgentDirectivesPrompt = `<!-- cogni:protocol:start -->
+## Autonomous Semantic Memory (Cogni)
+- Before designing or implementing non-trivial features, architecture changes, or bugfixes, search existing memory: ` + "`cogni search \"<tags_or_query>\"`" + ` or MCP ` + "`cogni_search(query: \"...\")`" + `.
+- Retrieve full technical signature with ` + "`cogni get <id_or_topic_key>`" + ` or MCP ` + "`cogni_get`" + `.
+- Save high-signal architectural decisions, invariants, gotchas and bugfixes: ` + "`cogni save ...`" + ` or MCP ` + "`cogni_save`" + `.
+- Detailed operational guidelines available in skill: ` + "`cogni`" + ` (` + "`skills/cogni/SKILL.md`" + `).
+<!-- cogni:protocol:end -->`
+
+// InjectAgentDirectives safely appends or updates the Cogni prompt block in AGENTS.md / CLAUDE.md files without deleting existing content.
+func InjectAgentDirectives(homeDir string, allowedHarnesses []string) map[string]string {
+	harnessAllowed := func(h string) bool {
+		if len(allowedHarnesses) == 0 {
+			return true
+		}
+		for _, ah := range allowedHarnesses {
+			if ah == h || ah == "all" {
+				return true
+			}
+		}
+		return false
+	}
+
+	targets := make(map[string]string)
+	if harnessAllowed("pi") {
+		targets["pi"] = filepath.Join(homeDir, ".pi", "agent", "AGENTS.md")
+	}
+	if harnessAllowed("claude") {
+		targets["claude"] = filepath.Join(homeDir, ".claude", "CLAUDE.md")
+	}
+
+	injected := make(map[string]string)
+	for harness, targetPath := range targets {
+		parentDir := filepath.Dir(targetPath)
+		// Only touch if parent directory exists (e.g. ~/.pi/agent/ exists)
+		if _, err := os.Stat(parentDir); err != nil {
+			continue
+		}
+		if err := injectDirectivesToFile(targetPath); err == nil {
+			injected[harness] = targetPath
+		}
+	}
+
+	// Also check workspace root if AGENTS.md exists
+	if harnessAllowed("local") || harnessAllowed("workspace") {
+		if _, err := os.Stat("AGENTS.md"); err == nil {
+			if err := injectDirectivesToFile("AGENTS.md"); err == nil {
+				injected["workspace"] = "AGENTS.md"
+			}
+		}
+	}
+
+	return injected
+}
+
+func injectDirectivesToFile(filePath string) error {
+	canonicalPath := filePath
+	if real, err := filepath.EvalSymlinks(filePath); err == nil {
+		canonicalPath = real
+	}
+
+	data, err := os.ReadFile(canonicalPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// If file does not exist, write the block as initial content
+			return os.WriteFile(canonicalPath, []byte(AgentDirectivesPrompt+"\n"), 0644)
+		}
+		return err
+	}
+
+	content := string(data)
+	startMarker := "<!-- cogni:protocol:start -->"
+	endMarker := "<!-- cogni:protocol:end -->"
+
+	startIdx := strings.Index(content, startMarker)
+	endIdx := strings.Index(content, endMarker)
+
+	var newContent string
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		// Replace between markers
+		prefix := content[:startIdx]
+		suffix := content[endIdx+len(endMarker):]
+		newContent = prefix + AgentDirectivesPrompt + suffix
+	} else {
+		// Idempotently append to the very end of the file preserving 100% of existing content
+		trimmed := strings.TrimRight(content, "\r\n")
+		if trimmed == "" {
+			newContent = AgentDirectivesPrompt + "\n"
+		} else {
+			newContent = trimmed + "\n\n" + AgentDirectivesPrompt + "\n"
+		}
+	}
+
+	return os.WriteFile(canonicalPath, []byte(newContent), 0644)
+}
+
 // GetHarnessSkillPaths returns supported AI harness skill directory paths.
 // Nota: Arneses modernos como Antigravity y Cursor usan Always-On Rules + MCP
 // y NO requieren inyectar cogni como skill (evita lecturas forzadas de SKILL.md).
@@ -234,6 +329,9 @@ func GetHarnessSkillPaths(homeDir string) map[string][]string {
 		},
 		"antigravity": {},
 		"cursor":      {},
+		"pi": {
+			filepath.Join(homeDir, ".pi", "agent", "skills"),
+		},
 		"claude": {
 			filepath.Join(homeDir, ".claude", "skills"),
 		},
@@ -257,6 +355,10 @@ func GetHarnessSkillPaths(homeDir string) map[string][]string {
 // GetHarnessMCPPaths returns supported AI harness MCP configuration file paths
 func GetHarnessMCPPaths(homeDir string) map[string][]string {
 	return map[string][]string{
+		"pi": {
+			filepath.Join(homeDir, ".pi", "agent", "mcp.json"),
+			filepath.Join(homeDir, ".pi", "mcp.json"),
+		},
 		"antigravity": {
 			filepath.Join(homeDir, ".gemini", "config", "mcp_config.json"),
 		},
@@ -344,9 +446,14 @@ func ConfigureHarnessMCP(homeDir string, allowedHarnesses []string) map[string]s
 }
 
 func injectMCPServer(filePath string, serverName string, serverConfig map[string]any) error {
+	canonicalPath := filePath
+	if real, err := filepath.EvalSymlinks(filePath); err == nil {
+		canonicalPath = real
+	}
+
 	var root map[string]any
 
-	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
+	if data, err := os.ReadFile(canonicalPath); err == nil && len(data) > 0 {
 		_ = json.Unmarshal(data, &root)
 	}
 
@@ -380,14 +487,14 @@ func injectMCPServer(filePath string, serverName string, serverConfig map[string
 	servers[serverName] = serverConfig
 	root["mcpServers"] = servers
 
-	_ = os.MkdirAll(filepath.Dir(filePath), 0755)
+	_ = os.MkdirAll(filepath.Dir(canonicalPath), 0755)
 
 	data, err := json.MarshalIndent(root, "", "  ")
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(filePath, append(data, '\n'), 0644)
+	return os.WriteFile(canonicalPath, append(data, '\n'), 0644)
 }
 
 func injectOpenCodeMCP(filePath string, root map[string]any, serverName string, serverConfig map[string]any) error {

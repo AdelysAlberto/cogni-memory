@@ -220,3 +220,73 @@ func TestSessionSummaryAndRecentContext(t *testing.T) {
 		t.Errorf("Expected session summary first in recent context, got category: %s", contextMems[0].Category)
 	}
 }
+
+func TestCascadeBM25SearchAndFallbacks(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cogni-cascade-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_cascade.db")
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize storage: %v", err)
+	}
+	defer s.Close()
+
+	// 1. Create a memory in project-alpha
+	memAlpha := &core.Memory{
+		ProjectName:      "project-alpha",
+		Category:         "architecture",
+		Title:            "iOS Modal Stacking Fix and Screen Navigation",
+		TopicKey:         "arch/nav/modal-stacking",
+		SummarySignature: "Trigger: Modal crash on iOS | Invariant: RCTModalHostViewController cannot stack | Recipe: Use Stack.Screen",
+		Tags:             "ios,modal,navigation,uikit,react-native",
+	}
+	saved, err := s.SaveMemory(memAlpha)
+	if err != nil {
+		t.Fatalf("Failed to save memory: %v", err)
+	}
+
+	// 2. Test Multi-Token query with extra noise words that would break strict AND
+	// Notice: "crash", "failure", "error", "react" are mixed with "modal" and "ios"
+	noisyQuery := "ios modal stacking navigation crash failure error react"
+	resultsNoisy, err := s.SearchMemories("project-alpha", noisyQuery, "architecture", 5)
+	if err != nil {
+		t.Fatalf("Search with noisy query failed: %v", err)
+	}
+	if len(resultsNoisy) == 0 {
+		t.Fatalf("Expected cascade BM25 to find the document despite extra query words, got 0 results")
+	}
+	if resultsNoisy[0].ID != saved.ID {
+		t.Errorf("Expected ID %d, got %d", saved.ID, resultsNoisy[0].ID)
+	}
+
+	// 3. Test Cross-Project Fallback:
+	// Searching from project-beta (which has no local records) for "modal stacking"
+	resultsCross, err := s.SearchMemories("project-beta", "modal stacking ios", "architecture", 5)
+	if err != nil {
+		t.Fatalf("Cross-project search failed: %v", err)
+	}
+	if len(resultsCross) == 0 {
+		t.Fatalf("Expected cross-project fallback to find the document from project-alpha, got 0 results")
+	}
+	if resultsCross[0].ID != saved.ID {
+		t.Errorf("Expected cross-project result ID %d, got %d", saved.ID, resultsCross[0].ID)
+	}
+
+	// 4. Test Category Softening Fallback:
+	// Document was saved as "architecture", but agent searches with category "bugfix"
+	resultsCategory, err := s.SearchMemories("project-alpha", "modal stacking ios", "bugfix", 5)
+	if err != nil {
+		t.Fatalf("Category softening search failed: %v", err)
+	}
+	if len(resultsCategory) == 0 {
+		t.Fatalf("Expected category softening fallback to find the document despite mismatched category, got 0 results")
+	}
+	if resultsCategory[0].ID != saved.ID {
+		t.Errorf("Expected category softened result ID %d, got %d", saved.ID, resultsCategory[0].ID)
+	}
+}
+

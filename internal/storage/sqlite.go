@@ -373,22 +373,23 @@ func (s *Storage) GetMemoryByTopicKey(projectName, topicKey string) (*core.Memor
 	return &m, nil
 }
 
-// buildFTSQuery cleans input and expands terms with stem prefixes (e.g. utils -> utils* OR util*)
-func buildFTSQuery(query string) string {
+// buildFTSQueryTokens cleans input and expands terms with stem prefixes (e.g. utils -> utils* OR util*)
+func buildFTSQueryTokens(query string) []string {
 	sanitized := strings.TrimSpace(query)
 	if sanitized == "" {
-		return ""
+		return nil
 	}
 
 	// Remove FTS special characters that break FTS syntax
 	replacer := strings.NewReplacer(
 		"\"", " ", "'", " ", "*", " ", ":", " ", "(", " ", ")", " ",
 		"-", " ", "^", " ", "{", " ", "}", " ", "#", " ", ",", " ",
+		"~", " ", "+", " ", "[", " ", "]", " ", "!", " ", "@", " ",
 	)
 	clean := replacer.Replace(sanitized)
 	words := strings.Fields(clean)
 	if len(words) == 0 {
-		return ""
+		return nil
 	}
 
 	var terms []string
@@ -414,47 +415,98 @@ func buildFTSQuery(query string) string {
 			terms = append(terms, fmt.Sprintf("%s*", w))
 		}
 	}
-	return strings.Join(terms, " ")
+	return terms
 }
 
-// SearchMemories performs full-text or fuzzy search across memories
+// buildFTSQuery preserves backwards compatibility
+func buildFTSQuery(query string) string {
+	tokens := buildFTSQueryTokens(query)
+	if len(tokens) == 0 {
+		return ""
+	}
+	return strings.Join(tokens, " ")
+}
+
+// SearchMemories performs full-text or fuzzy search across memories using a cascade strategy
 func (s *Storage) SearchMemories(projectName, query, category string, limit int) ([]core.Memory, error) {
+	return s.SearchMemoriesAdvanced(projectName, query, category, limit, false)
+}
+
+// SearchMemoriesAdvanced performs cascade BM25 search with optional cross-project searching
+func (s *Storage) SearchMemoriesAdvanced(projectName, query, category string, limit int, allProjects bool) ([]core.Memory, error) {
 	if limit <= 0 {
 		limit = 10
 	}
 
-	var memories []core.Memory
+	// Sanitize project name
+	cleanedProject := strings.TrimSpace(projectName)
+	if cleanedProject == "/" || cleanedProject == "." || cleanedProject == "default_project" || allProjects {
+		cleanedProject = ""
+	}
 
-	// 1. Try FTS5 match first if query is non-empty
-	ftsArg := buildFTSQuery(query)
-	if ftsArg != "" {
-		ftsQuery := `
-			SELECT m.id, m.project_name, m.category, m.title, m.topic_key, m.summary_signature, m.tags,
-			       COALESCE(m.created_at, CURRENT_TIMESTAMP), COALESCE(m.updated_at, CURRENT_TIMESTAMP)
-			FROM memories_fts f
-			JOIN agent_memories m ON f.rowid = m.id
-			WHERE (? = '' OR m.project_name = ? OR m.project_name = 'global')
-			  AND (? = '' OR m.category = ?)
-			  AND memories_fts MATCH ?
-			ORDER BY rank
-			LIMIT ?
-		`
-		rows, err := s.db.Query(ftsQuery, projectName, projectName, category, category, ftsArg, limit)
-		if err == nil {
+	var memories []core.Memory
+	seen := make(map[int64]bool)
+
+	tokens := buildFTSQueryTokens(query)
+	if len(tokens) > 0 {
+		exactArg := strings.Join(tokens, " ")
+		orArg := strings.Join(tokens, " OR ")
+
+		executeFTS := func(matchClause, projFilter, catFilter string, maxLimit int) {
+			if maxLimit <= 0 || matchClause == "" {
+				return
+			}
+			sqlQuery := `
+				SELECT m.id, m.project_name, m.category, m.title, m.topic_key, m.summary_signature, m.tags,
+				       COALESCE(m.created_at, CURRENT_TIMESTAMP), COALESCE(m.updated_at, CURRENT_TIMESTAMP)
+				FROM memories_fts f
+				JOIN agent_memories m ON f.rowid = m.id
+				WHERE (? = '' OR m.project_name = ? OR m.project_name = 'global')
+				  AND (? = '' OR m.category = ?)
+				  AND memories_fts MATCH ?
+				ORDER BY bm25(memories_fts, 5.0, 10.0, 2.0, 5.0) ASC
+				LIMIT ?
+			`
+			rows, err := s.db.Query(sqlQuery, projFilter, projFilter, catFilter, catFilter, matchClause, maxLimit)
+			if err != nil {
+				return
+			}
 			defer rows.Close()
 			for rows.Next() {
 				var m core.Memory
 				var cStr, uStr string
 				if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err == nil {
-					m.CreatedAt = parseTime(cStr)
-					m.UpdatedAt = parseTime(uStr)
-					m.Source = s.source
-					memories = append(memories, m)
+					if !seen[m.ID] {
+						seen[m.ID] = true
+						m.CreatedAt = parseTime(cStr)
+						m.UpdatedAt = parseTime(uStr)
+						m.Source = s.source
+						memories = append(memories, m)
+					}
 				}
 			}
-			if len(memories) > 0 {
-				return memories, nil
-			}
+		}
+
+		// Cascade Pass 1: Strict AND match within project & category
+		executeFTS(exactArg, cleanedProject, category, limit-len(memories))
+
+		// Cascade Pass 2: BM25 OR ranking within project & category
+		if len(memories) < limit {
+			executeFTS(orArg, cleanedProject, category, limit-len(memories))
+		}
+
+		// Cascade Pass 3: Cross-Project Fallback (if project filter was active and results < limit)
+		if len(memories) < limit && cleanedProject != "" {
+			executeFTS(orArg, "", category, limit-len(memories))
+		}
+
+		// Cascade Pass 4: Cross-Category Fallback (if category filter was active and results < limit)
+		if len(memories) < limit && category != "" {
+			executeFTS(orArg, "", "", limit-len(memories))
+		}
+
+		if len(memories) > 0 {
+			return memories, nil
 		}
 	}
 
@@ -464,47 +516,72 @@ func (s *Storage) SearchMemories(projectName, query, category string, limit int)
 		return memories, nil
 	}
 
-	var whereClauses []string
-	var args []interface{}
-
-	whereClauses = append(whereClauses, "(? = '' OR project_name = ? OR project_name = 'global')")
-	args = append(args, projectName, projectName)
-
-	whereClauses = append(whereClauses, "(? = '' OR category = ?)")
-	args = append(args, category, category)
-
-	for _, word := range words {
-		pattern := "%" + word + "%"
-		whereClauses = append(whereClauses, "(title LIKE ? OR topic_key LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)")
-		args = append(args, pattern, pattern, pattern, pattern)
-	}
-
-	likeQuery := fmt.Sprintf(`
-		SELECT id, project_name, category, title, topic_key, summary_signature, tags,
-		       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
-		FROM agent_memories
-		WHERE %s
-		ORDER BY created_at DESC
-		LIMIT ?
-	`, strings.Join(whereClauses, " AND "))
-
-	args = append(args, limit)
-	rows, err := s.db.Query(likeQuery, args...)
-	if err != nil {
-		return nil, fmt.Errorf("search error: %w", err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var m core.Memory
-		var cStr, uStr string
-		if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err != nil {
-			return nil, err
+	executeLike := func(projFilter, catFilter string, useAnd bool, maxLimit int) {
+		if maxLimit <= 0 {
+			return
 		}
-		m.CreatedAt = parseTime(cStr)
-		m.UpdatedAt = parseTime(uStr)
-		m.Source = s.source
-		memories = append(memories, m)
+		var whereClauses []string
+		var args []any
+
+		whereClauses = append(whereClauses, "(? = '' OR project_name = ? OR project_name = 'global')")
+		args = append(args, projFilter, projFilter)
+
+		whereClauses = append(whereClauses, "(? = '' OR category = ?)")
+		args = append(args, catFilter, catFilter)
+
+		var wordClauses []string
+		for _, word := range words {
+			pattern := "%" + word + "%"
+			wordClauses = append(wordClauses, "(title LIKE ? OR topic_key LIKE ? OR summary_signature LIKE ? OR tags LIKE ?)")
+			args = append(args, pattern, pattern, pattern, pattern)
+		}
+
+		joiner := " AND "
+		if !useAnd {
+			joiner = " OR "
+		}
+		whereClauses = append(whereClauses, "("+strings.Join(wordClauses, joiner)+")")
+
+		likeQuery := fmt.Sprintf(`
+			SELECT id, project_name, category, title, topic_key, summary_signature, tags,
+			       COALESCE(created_at, CURRENT_TIMESTAMP), COALESCE(updated_at, CURRENT_TIMESTAMP)
+			FROM agent_memories
+			WHERE %s
+			ORDER BY created_at DESC
+			LIMIT ?
+		`, strings.Join(whereClauses, " AND "))
+
+		args = append(args, maxLimit)
+		rows, err := s.db.Query(likeQuery, args...)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var m core.Memory
+			var cStr, uStr string
+			if err := rows.Scan(&m.ID, &m.ProjectName, &m.Category, &m.Title, &m.TopicKey, &m.SummarySignature, &m.Tags, &cStr, &uStr); err == nil {
+				if !seen[m.ID] {
+					seen[m.ID] = true
+					m.CreatedAt = parseTime(cStr)
+					m.UpdatedAt = parseTime(uStr)
+					m.Source = s.source
+					memories = append(memories, m)
+				}
+			}
+		}
+	}
+
+	// Like Pass 1: strict within project & category
+	executeLike(cleanedProject, category, true, limit-len(memories))
+	// Like Pass 2: OR within project & category
+	if len(memories) < limit {
+		executeLike(cleanedProject, category, false, limit-len(memories))
+	}
+	// Like Pass 3: cross-project OR
+	if len(memories) < limit {
+		executeLike("", "", false, limit-len(memories))
 	}
 
 	return memories, nil
@@ -606,10 +683,13 @@ func (s *Storage) GetStats() (*core.Stats, error) {
 		return nil, fmt.Errorf("error querying stats: %w", err)
 	}
 
+	// Average real-world savings: avoiding repetitive file reads and reasoning loops (~1500 tokens per memory)
+	estimatedSaved := (totalMemories * 1500) + (totalChars / 4)
+
 	return &core.Stats{
 		TotalMemories:        totalMemories,
 		TotalProjects:        totalProjects,
-		EstimatedTokensSaved: totalChars / 4,
+		EstimatedTokensSaved: estimatedSaved,
 	}, nil
 }
 
@@ -618,6 +698,11 @@ func (s *Storage) GetStats() (*core.Stats, error) {
 func (s *Storage) GetRecentContext(projectName string, limit int) ([]core.Memory, error) {
 	if limit <= 0 {
 		limit = 5
+	}
+
+	cleanedProject := strings.TrimSpace(projectName)
+	if cleanedProject == "/" || cleanedProject == "." || cleanedProject == "default_project" {
+		cleanedProject = ""
 	}
 
 	query := `
@@ -635,7 +720,7 @@ func (s *Storage) GetRecentContext(projectName string, limit int) ([]core.Memory
 			updated_at DESC
 		LIMIT ?
 	`
-	rows, err := s.db.Query(query, projectName, projectName, limit)
+	rows, err := s.db.Query(query, cleanedProject, cleanedProject, limit)
 	if err != nil {
 		return nil, fmt.Errorf("error querying recent context: %w", err)
 	}

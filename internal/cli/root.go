@@ -153,7 +153,7 @@ func handleInit(args []string) int {
 	project := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
 	noSkills := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
 	allSkills := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
-	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, opencode, local, copilot, hermes, codex, all, none)")
+	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, pi, opencode, local, copilot, hermes, codex, all, none)")
 	// --global mantenido como alias de retrocompatibilidad
 	_ = fs.Bool("global", false, "")
 	_ = fs.Parse(args)
@@ -218,11 +218,15 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 
 		_ = core.InstallRules(home, cfg.SelectedHarnesses)
 		mcpResults := core.ConfigureHarnessMCP(home, cfg.SelectedHarnesses)
+		injectedDirectives := core.InjectAgentDirectives(home, cfg.SelectedHarnesses)
 
 		fmt.Println("🔄 Cogni Upgrade: Arneses de IA actualizados:")
-		fmt.Printf("  ✔ Arneses activos: %s\n", strings.Join(cfg.SelectedHarnesses, ", "))
+		fmt.Printf("  ✔ Arneses activos:    %s\n", strings.Join(cfg.SelectedHarnesses, ", "))
 		if len(mcpResults) > 0 {
-			fmt.Printf("  ✔ Servidores MCP:  Configurados en %d destinos\n", len(mcpResults))
+			fmt.Printf("  ✔ Servidores MCP:     Configurados en %d destinos\n", len(mcpResults))
+		}
+		if len(injectedDirectives) > 0 {
+			fmt.Printf("  ✔ Directivas AGENTS:  Preservadas e inyectadas en %d destinos\n", len(injectedDirectives))
 		}
 		return
 	}
@@ -236,44 +240,47 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 			choice = "2"
 		case "claude", "3":
 			choice = "3"
-		case "opencode", "4":
+		case "pi", "4":
 			choice = "4"
-		case "local", "agents", "5":
+		case "opencode", "5":
 			choice = "5"
-		case "copilot", "6":
+		case "local", "agents", "6":
 			choice = "6"
-		case "hermes", "7":
+		case "copilot", "7":
 			choice = "7"
-		case "codex", "8":
+		case "hermes", "8":
 			choice = "8"
-		case "all", "9":
+		case "codex", "9":
 			choice = "9"
-		case "none", "10":
+		case "all", "10":
 			choice = "10"
+		case "none", "11":
+			choice = "11"
 		default:
 			choice = harnessFlag
 		}
 	} else if autoAll {
-		choice = "9"
+		choice = "10"
 	} else {
 		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
 		fmt.Println("  1) Gemini Antigravity    (~/.gemini/)")
 		fmt.Println("  2) Cursor IDE            (~/.cursor/)")
 		fmt.Println("  3) Claude Code / Desktop (~/.claude/)")
-		fmt.Println("  4) OpenCode              (~/.config/opencode/)")
-		fmt.Println("  5) Agentes Estándar      (~/.agents/)")
-		fmt.Println("  6) GitHub Copilot        (VS Code / Copilot)")
-		fmt.Println("  7) Hermes CLI            (~/.hermes/)")
-		fmt.Println("  8) Codex CLI             (~/.codex/)")
-		fmt.Println("  9) TODOS los entornos    (Recomendado)")
-		fmt.Println(" 10) Omitir skill")
-		fmt.Print("\nIngresa tu opción (1-10) [por defecto: 9]: ")
+		fmt.Println("  4) Pi Coding Agent       (~/.pi/agent/)")
+		fmt.Println("  5) OpenCode              (~/.config/opencode/)")
+		fmt.Println("  6) Agentes Estándar      (~/.agents/)")
+		fmt.Println("  7) GitHub Copilot        (VS Code / Copilot)")
+		fmt.Println("  8) Hermes CLI            (~/.hermes/)")
+		fmt.Println("  9) Codex CLI             (~/.codex/)")
+		fmt.Println(" 10) TODOS los entornos    (Recomendado)")
+		fmt.Println(" 11) Omitir skill")
+		fmt.Print("\nIngresa tu opción (1-11) [por defecto: 10]: ")
 
 		var input string
 		_, _ = fmt.Scanln(&input)
 		choice = strings.TrimSpace(input)
 		if choice == "" {
-			choice = "9"
+			choice = "10"
 		}
 	}
 
@@ -291,28 +298,31 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 		selectedHarnesses = []string{"claude"}
 		harnessLabel = "Claude Code / Desktop"
 	case "4":
+		selectedHarnesses = []string{"pi"}
+		harnessLabel = "Pi Coding Agent"
+	case "5":
 		selectedHarnesses = []string{"opencode"}
 		harnessLabel = "OpenCode"
-	case "5":
+	case "6":
 		selectedHarnesses = []string{"local"}
 		harnessLabel = "Agentes Estándar (~/.agents/)"
-	case "6":
+	case "7":
 		selectedHarnesses = []string{"copilot"}
 		harnessLabel = "GitHub Copilot"
-	case "7":
+	case "8":
 		selectedHarnesses = []string{"hermes"}
 		harnessLabel = "Hermes CLI"
-	case "8":
+	case "9":
 		selectedHarnesses = []string{"codex"}
 		harnessLabel = "Codex CLI"
-	case "9":
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes", "codex"}
-		harnessLabel = "Todos los arneses detectados"
 	case "10":
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "pi", "opencode", "copilot", "hermes", "codex"}
+		harnessLabel = "Todos los arneses detectados"
+	case "11":
 		fmt.Println("⏭️ Instalación de Skill omitida.")
 		return
 	default:
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "opencode", "copilot", "hermes", "codex"}
+		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "pi", "opencode", "copilot", "hermes", "codex"}
 		harnessLabel = "Todos los arneses detectados"
 	}
 
@@ -327,6 +337,7 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 	_ = core.SaveConfig(home, &core.Config{SelectedHarnesses: selectedHarnesses})
 	_ = core.InstallRules(home, selectedHarnesses)
 	mcpResults := core.ConfigureHarnessMCP(home, selectedHarnesses)
+	injectedDirectives := core.InjectAgentDirectives(home, selectedHarnesses)
 
 	dbPath := prettyPath(filepath.Join(core.GetGlobalCogniDir(), "memory.db"))
 
@@ -337,9 +348,12 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 	if len(mcpResults) > 0 {
 		fmt.Printf("  ✔ Servidores MCP:   Configurados en %d destinos\n", len(mcpResults))
 	}
+	if len(injectedDirectives) > 0 {
+		fmt.Printf("  ✔ Directivas AGENTS: Preservadas e inyectadas en %d destinos\n", len(injectedDirectives))
+	}
 
 	fmt.Println("\n💡 Uso rápido:")
-	fmt.Println("   cogni search \"<query>\"   Busca memorias sintéticas (FTS5)")
+	fmt.Println("   cogni search \"<query>\"   Busca memorias sintéticas (FTS5 BM25)")
 	fmt.Println("   cogni save --title \"..\"  Guarda una firma de conocimiento")
 	fmt.Println("   cogni ui                 Abre el dashboard gráfico en el navegador")
 }
