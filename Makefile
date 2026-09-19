@@ -30,6 +30,14 @@ test:
 run:
 	go run ./cmd/cogni ui
 
+macos-app:
+	@chmod +x macos/build.sh
+	./macos/build.sh --install
+
+macos-package:
+	@chmod +x macos/package.sh
+	./macos/package.sh
+
 clean:
-	rm -rf bin/
+	rm -rf bin/ macos/build/ macos/dist/
 

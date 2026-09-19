@@ -4,13 +4,16 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/AdelysAlberto/cogni/internal/core"
@@ -70,6 +73,8 @@ func Execute(args []string) int {
 		return handlePromote(cmdArgs)
 	case "ui":
 		return handleUI(cmdArgs)
+	case "tray", "bar":
+		return handleTray(cmdArgs)
 	case "skill", "skills":
 		promptAndInstallSkills("", len(cmdArgs) > 0 && cmdArgs[0] == "--all")
 		return 0
@@ -110,6 +115,7 @@ Comandos Principales:
   list             Lista las memorias registradas
   stats            Muestra métricas y tokens ahorrados
   ui               Abre el dashboard gráfico interactivo en el navegador
+  bar, tray        Abre la app residente en el Top Bar (macOS) o Bandeja del Sistema
   skill            Instala o actualiza el Skill en tus arneses de IA
   uninstall        Desinstala Cogni, elimina el binario y limpia las skills
   version          Muestra la versión de Cogni
@@ -1188,6 +1194,98 @@ func handleUninstall(args []string) int {
 	return 0
 }
 
+func performAtomicUpgrade(latestTag string) error {
+	execPath, err := os.Executable()
+	if err != nil || execPath == "" {
+		home, _ := os.UserHomeDir()
+		execPath = filepath.Join(home, ".local", "bin", "cogni")
+	}
+	execPath, _ = filepath.EvalSymlinks(execPath)
+	binDir := filepath.Dir(execPath)
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return err
+	}
+
+	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
+	downloadURL := fmt.Sprintf("https://github.com/AdelysAlberto/cogni-memory/releases/download/%s/cogni_%s", latestTag, platform)
+
+	tempFile, err := os.CreateTemp(binDir, "cogni.tmp.*")
+	if err != nil {
+		return fmt.Errorf("creando archivo temporal: %w", err)
+	}
+	tempPath := tempFile.Name()
+
+	cleanedUp := false
+	cleanup := func() {
+		if !cleanedUp {
+			cleanedUp = true
+			_ = tempFile.Close()
+			_ = os.Remove(tempPath)
+		}
+	}
+	defer cleanup()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+
+	done := make(chan error, 1)
+	go func() {
+		select {
+		case <-sigChan:
+			cleanup()
+			fmt.Println("\n⏭️ Actualización cancelada por el usuario. La versión actual se mantiene intacta.")
+			os.Exit(0)
+		case <-done:
+			return
+		}
+	}()
+
+	client := &http.Client{Timeout: 90 * time.Second}
+	resp, err := client.Get(downloadURL)
+	if err != nil {
+		done <- err
+		return fmt.Errorf("descargando release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		err := fmt.Errorf("código HTTP %d al descargar binario desde GitHub", resp.StatusCode)
+		done <- err
+		return err
+	}
+
+	if _, err := io.Copy(tempFile, resp.Body); err != nil {
+		done <- err
+		return fmt.Errorf("escribiendo binario: %w", err)
+	}
+	_ = tempFile.Close()
+
+	if err := os.Chmod(tempPath, 0755); err != nil {
+		done <- err
+		return err
+	}
+
+	if runtime.GOOS == "darwin" {
+		_ = exec.Command("xattr", "-d", "com.apple.quarantine", tempPath).Run()
+		_ = exec.Command("codesign", "-s", "-", "-f", tempPath).Run()
+	}
+
+	// Atomic rename swap
+	oldPath := filepath.Join(binDir, fmt.Sprintf("cogni.old.%d", time.Now().UnixNano()))
+	_ = os.Rename(execPath, oldPath)
+	if err := os.Rename(tempPath, execPath); err != nil {
+		_ = os.Rename(oldPath, execPath) // rollback
+		done <- err
+		return fmt.Errorf("reemplazando binario: %w", err)
+	}
+	_ = os.Remove(oldPath)
+	cleanedUp = true
+	done <- nil
+
+	return nil
+}
+
 func handleUpgrade(args []string) int {
 	fmt.Println("🔍 Comprobando actualizaciones por tags en GitHub (AdelysAlberto/cogni-memory)...")
 
@@ -1219,15 +1317,27 @@ func handleUpgrade(args []string) int {
 	fmt.Printf("\n🚀 ¡Nueva versión disponible: %s! (%s)\n", latest, releaseURL)
 	fmt.Println("📥 Descargando e instalando actualización...")
 
-	cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh | bash")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error durante la actualización: %v\n", err)
-		return 1
+	if err := performAtomicUpgrade(latest); err != nil {
+		fmt.Fprintf(os.Stderr, "⚠️ Falló la actualización atómica directa: %v\n", err)
+		fmt.Println("🔄 Intentando mediante script de instalación como fallback...")
+
+		cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh | bash")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "❌ Error durante la actualización: %v\n", err)
+			return 1
+		}
+	} else {
+		// Auto-actualizar skills y reglas de los arneses configurados sin fricción
+		home, _ := os.UserHomeDir()
+		if home != "" {
+			promptAndInstallSkills("", true)
+		}
 	}
 
-	fmt.Printf("🎉 ¡Cogni ha sido actualizado con éxito a la versión %s!\n", latest)
+	fmt.Printf("\n🎉 ¡Cogni ha sido actualizado con éxito a la versión %s!\n", latest)
 	return 0
 }
 

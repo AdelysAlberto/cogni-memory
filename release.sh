@@ -51,6 +51,9 @@ build_binary() {
     local output="bin/cogni_${os}_${arch}"
     echo "  • Compilando ${output}..."
     GOOS="$os" GOARCH="$arch" go build -ldflags="-s -w -X github.com/AdelysAlberto/cogni/internal/cli.Version=${NEW_TAG}" -o "$output" ./cmd/cogni
+    if [[ "$os" == "darwin" ]] && command -v codesign &>/dev/null; then
+        codesign -s - -f "$output" 2>/dev/null || true
+    fi
 }
 
 build_binary "darwin" "arm64"
