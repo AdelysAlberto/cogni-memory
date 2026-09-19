@@ -18,8 +18,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.image = CogniLogo.statusImage(pulse: .idle)
             button.target = self
-            button.action = #selector(statusItemClicked)
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            button.action = #selector(statusItemClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp, .leftMouseDown, .rightMouseDown])
         }
 
         // Configure Popover
@@ -29,7 +29,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSApp.terminate(nil)
             })
         )
-        hosting.sizingOptions = [.preferredContentSize]
+        hosting.preferredContentSize = CGSize(width: 330, height: 440)
         popover.contentViewController = hosting
         popover.behavior = .transient
         popover.animates = true
@@ -50,11 +50,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKey.register()
     }
 
-    @objc private func statusItemClicked() {
-        guard let event = NSApp.currentEvent else { return }
-        if event.type == .rightMouseUp {
-            showContextMenu()
-        } else {
+    @objc private func statusItemClicked(_ sender: NSStatusBarButton) {
+        guard let event = NSApp.currentEvent else {
+            togglePopover()
+            return
+        }
+
+        if event.type == .rightMouseUp || event.type == .rightMouseDown || event.modifierFlags.contains(.control) {
+            showContextMenu(at: sender)
+        } else if event.type == .leftMouseUp || event.type == .leftMouseDown {
             togglePopover()
         }
     }
@@ -71,7 +75,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func showContextMenu() {
+    private func showContextMenu(at button: NSStatusBarButton) {
         let menu = NSMenu()
 
         let headerItem = NSMenuItem(title: "Cogni Memory Engine", action: nil, keyEquivalent: "")
@@ -104,9 +108,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         quitItem.target = self
         menu.addItem(quitItem)
 
-        statusItem.menu = menu
-        statusItem.button?.performClick(nil)
-        statusItem.menu = nil // Restore left click behavior
+        let location = NSPoint(x: 0, y: button.bounds.height + 4)
+        menu.popUp(positioning: nil, at: location, in: button)
     }
 
     @objc private func contextOpenUI() {
