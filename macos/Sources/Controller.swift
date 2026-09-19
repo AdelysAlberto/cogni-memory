@@ -76,6 +76,7 @@ public final class CogniController: ObservableObject {
     }
 
     public func refreshAll() {
+        fetchLocalVersion()
         fetchStats()
         fetchConfig()
     }

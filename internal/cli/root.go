@@ -1337,6 +1337,15 @@ func handleUpgrade(args []string) int {
 		}
 	}
 
+	if runtime.GOOS == "darwin" {
+		home, _ := os.UserHomeDir()
+		appPath := filepath.Join(home, "Applications", "CogniBar.app")
+		if dirExists(appPath) {
+			_ = exec.Command("pkill", "-x", "CogniBar").Run()
+			_ = exec.Command("open", appPath).Run()
+		}
+	}
+
 	fmt.Printf("\n🎉 ¡Cogni ha sido actualizado con éxito a la versión %s!\n", latest)
 	return 0
 }

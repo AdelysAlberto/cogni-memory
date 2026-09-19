@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://golang.org/"><img src="https://img.shields.io/badge/Go-1.22+-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go Version"></a>
   <a href="https://sqlite.org/"><img src="https://img.shields.io/badge/SQLite-FTS5%20BM25-003B57?style=for-the-badge&logo=sqlite&logoColor=white" alt="SQLite FTS5 BM25"></a>
+  <a href="https://developer.apple.com/"><img src="https://img.shields.io/badge/Apple-Certified%20%26%20Notarized-000000?style=for-the-badge&logo=apple&logoColor=white" alt="Apple Certified & Notarized"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge" alt="License"></a>
   <a href="https://github.com/AdelysAlberto/cogni-memory"><img src="https://img.shields.io/badge/Harnesses-Universal-FF6F61?style=for-the-badge" alt="Harnesses"></a>
 </p>
@@ -23,6 +24,63 @@
 Cada vez que un agente de desarrollo reinicia una sesion o sufre una compactacion de contexto, olvida por completo los errores que ya resolvio, los acuerdos de arquitectura y las decisiones de librerias. El resultado es devastador: el modelo gasta entre 10.000 y 25.000 tokens de contexto leyendo archivos que no deberia volver a tocar, y quema entre 2.000 y 8.000 tokens de razonamiento intentando deducir de nuevo lo que ya estaba resuelto.
 
 **Cogni** es una infraestructura local de memoria persistente en Go y SQLite FTS5 con clasificacion probabilistica BM25. En lugar de forzar a tu agente a releer codigo fuente o depender de complejas bases de datos vectoriales que fallan al buscar identificadores de codigo, Cogni entrega el razonamiento ya resuelto en menos de 40 tokens.
+
+---
+
+## Instalacion Rapida
+
+El instalador detecta automaticamente tu sistema operativo (macOS / Linux / Windows) y tu arquitectura (`arm64`, `x86_64`, `amd64`).
+
+<p align="center">
+  <img src="artifacts/assets/cognibar-topbar.png" width="380" alt="CogniBar macOS TopBar App" /><br>
+  <sub>CogniBar residente en la barra de menús de macOS con indicador de estado, tokens ahorrados y comandos rápidos</sub>
+</p>
+
+### macOS (Apple Silicon M1/M2/M3/M4 e Intel)
+
+Dispones de dos métodos de instalación:
+
+#### Opción A: Descarga de Aplicación Nativa para Barra de Menús (Recomendado)
+Software **Certificado y Notarizado por Apple** con firma de código Developer ID:
+
+* **[Descargar CogniBar.dmg (macOS Universal)](https://github.com/AdelysAlberto/cogni-memory/releases/latest/download/CogniBar.dmg)**
+
+Abre el archivo `.dmg` descargado y arrastra **CogniBar** a tu carpeta de **Aplicaciones**.
+
+#### Opción B: Instalación por Terminal (CLI + Motor de Memoria)
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
+```
+
+Para activar la aplicación residente en la barra de menús desde la terminal:
+```bash
+cogni bar
+```
+
+### Linux (Ubuntu, Debian, Fedora, Arch, Alpine en amd64 / arm64)
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
+```
+
+### Windows (PowerShell / WSL)
+
+En **PowerShell**:
+```powershell
+# Opción A: Instalación directa con Go (Recomendada)
+go install github.com/AdelysAlberto/cogni/cmd/cogni@latest
+
+# Opción B: Vía WSL (Windows Subsystem for Linux) / Git Bash
+bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
+```
+
+### Compilación Manual desde Fuente (Go 1.22+)
+
+```bash
+git clone https://github.com/AdelysAlberto/cogni-memory.git cogni
+cd cogni
+make install
+```
 
 ---
 
@@ -51,6 +109,17 @@ Los sistemas tradicionales de FTS fallan cuando un agente busca frases largas co
 ### 4. Integracion Idempotente y Cero Sobrescrituras
 * **`mcp.json` Seguro**: Desmaterializa las configuraciones previas y solo registra o actualiza la clave `"cogni"`. Servidores de Postgres, Playwright, Pencil o notificadores externos jamas se pierden ni se alteran.
 * **`AGENTS.md` Preservado**: Inyecta bloques delimitados (`<!-- cogni:protocol:start -->`) al final del archivo. Cero lineas de tus directivas previas resultan afectadas.
+
+---
+
+## CogniBar: Aplicacion Nativa para Barra de Menus (macOS)
+
+Cogni incluye una aplicación nativa para la barra superior de macOS construida en Swift y SwiftUI (`macos/`):
+
+* **Certificación Apple**: Firmada y notarizada oficialmente por Apple con certificado Developer ID.
+* **Synapse Pulse**: El icono en la barra superior emite un destello reactivo en tiempo real cada vez que un agente de IA guarda o recupera una memoria (monitoreo a nivel de kernel mediante `FSEvents` con 0ms de retardo y cero consumo de CPU/batería).
+* **Atajo Global (`⌥⌘C` / Option + Command + C)**: Abre el panel interactivo desde cualquier pantalla sin requerir permisos de accesibilidad.
+* **Control Total y Comandos Rápidos**: Muestra los tokens ahorrados, estado de la base de datos, arneses conectados, pestaña de comandos útiles y un verificador de actualizaciones en tiempo real.
 
 ---
 
@@ -88,69 +157,6 @@ Summary: Trigger: Modal stacking error on iOS | Invariant: RCTModalHostViewContr
 Topic: standards/i18n/ui
 Summary: What: Todo texto visible en TSX debe usar t('namespace:key') | Why: Estandar global de traduccion | Where: src/modules/*, src/layouts/* | Learned: Toast notifications tambien requieren internacionalizacion
 ```
-
----
-
-## Instalacion Multiplataforma
-
-El instalador detecta automaticamente tu sistema operativo (macOS / Linux / Windows) y tu arquitectura (`arm64`, `x86_64`, `amd64`).
-
-### macOS (Apple Silicon M1/M2/M3/M4 e Intel)
-
-Dispones de dos métodos de instalación:
-
-#### Opción A: Descarga del Instalador Gráfico DMG (Recomendado)
-Descarga la aplicación nativa para la barra de menús, firmada y notarizada por Apple:
-
-* **[Descargar CogniBar.dmg (macOS Universal)](https://github.com/AdelysAlberto/cogni-memory/releases/latest/download/CogniBar.dmg)**
-
-Abre el archivo `.dmg` descargado y arrastra **CogniBar** a tu carpeta de **Aplicaciones**.
-
-#### Opción B: Instalación por Terminal (CLI + Motor de Memoria)
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
-```
-
-Para activar la aplicación residente en la barra de menús desde la terminal:
-```bash
-cogni bar
-```
-
-### Linux (Ubuntu, Debian, Fedora, Arch, Alpine en amd64 / arm64)
-
-```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
-```
-
-### Windows (PowerShell / WSL)
-
-En **PowerShell**:
-```powershell
-# Opcion A: Instalacion directa con Go (Recomendada)
-go install github.com/AdelysAlberto/cogni/cmd/cogni@latest
-
-# Opcion B: Vía WSL (Windows Subsystem for Linux) / Git Bash
-bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
-```
-
-### Compilacion Manual desde Fuente (Go 1.22+)
-
-```bash
-git clone https://github.com/AdelysAlberto/cogni-memory.git cogni
-cd cogni
-make install
-```
-
----
-
-## CogniBar: Aplicacion de Barra de Menus (macOS)
-
-Cogni incluye una aplicación nativa para la barra superior de macOS construida en Swift y SwiftUI (`macos/`):
-
-* **Synapse Pulse**: El icono en la barra superior emite un destello reactivo en tiempo real cada vez que un agente de IA guarda o recupera una memoria (monitoreo a nivel de kernel mediante `FSEvents` con 0ms de retardo y cero consumo de CPU/batería).
-* **Atajo Global (`⌥⌘C` / Option + Command + C)**: Abre el panel interactivo desde cualquier pantalla sin requerir permisos de accesibilidad.
-* **Control Total**: Muestra los tokens ahorrados, estado de la base de datos, arneses activos y botones para abrir el Web Dashboard o compactar la base de datos.
-* **Firma y Notarizacion Apple**: Compatible con Developer ID Application y Notary Service de Apple (`make macos-package`).
 
 ---
 
