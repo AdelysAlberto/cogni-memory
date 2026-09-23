@@ -290,3 +290,45 @@ func TestCascadeBM25SearchAndFallbacks(t *testing.T) {
 	}
 }
 
+func TestStorageOptimize(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "cogni-optimize-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := filepath.Join(tmpDir, "test_optimize.db")
+	s, err := New(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to initialize storage: %v", err)
+	}
+	defer s.Close()
+
+	// Insert several memories
+	for i := 1; i <= 10; i++ {
+		_, err := s.SaveMemory(&core.Memory{
+			ProjectName:      "test-proj",
+			Category:         "architecture",
+			Title:            "Architecture Note",
+			TopicKey:         "arch/note",
+			SummarySignature: "Signature content to fill SQLite pages with data for test purposes.",
+			Tags:             "arch,testing,optimization",
+		})
+		if err != nil {
+			t.Fatalf("Failed to save memory: %v", err)
+		}
+	}
+
+	optStats, err := s.Optimize()
+	if err != nil {
+		t.Fatalf("Optimize returned error: %v", err)
+	}
+	if optStats.TotalRows != 1 { // Upsert with same topic_key keeps 1 row
+		t.Errorf("Expected 1 total row, got %d", optStats.TotalRows)
+	}
+	if optStats.BytesAfter <= 0 {
+		t.Errorf("Expected positive BytesAfter, got %d", optStats.BytesAfter)
+	}
+}
+
+

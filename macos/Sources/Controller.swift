@@ -83,15 +83,20 @@ public final class CogniController: ObservableObject {
         statusMessage = "Optimizando base de datos..."
 
         Task.detached(priority: .userInitiated) {
-            _ = Shell.runCogni(["stats"])
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            let res = Shell.runCogni(["clean"])
+            try? await Task.sleep(nanoseconds: 300_000_000)
 
             await MainActor.run {
                 self.isCleaning = false
-                self.statusMessage = "Base de datos optimizada"
+                if res.status == 0 {
+                    self.statusMessage = "Base de datos optimizada (FTS5 + VACUUM)"
+                } else {
+                    self.statusMessage = "Error al optimizar base de datos"
+                }
             }
         }
     }
+
 
     // MARK: - Launch at Login
     public func checkLaunchAtLoginStatus() {

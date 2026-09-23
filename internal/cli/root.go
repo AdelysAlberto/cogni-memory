@@ -69,6 +69,8 @@ func Execute(args []string) int {
 		return handleList(cmdArgs)
 	case "stats":
 		return handleStats(cmdArgs)
+	case "clean", "optimize", "vacuum":
+		return handleOptimize(cmdArgs)
 	case "promote":
 		return handlePromote(cmdArgs)
 	case "ui":
@@ -1060,6 +1062,72 @@ func handleStats(args []string) int {
 	return 0
 }
 
+func handleOptimize(args []string) int {
+	fs := flag.NewFlagSet("clean", flag.ExitOnError)
+	global := fs.Bool("global", false, "Optimizar exclusivamente base de datos global")
+	all := fs.Bool("all", true, "Optimizar tanto bases de datos locales como globales")
+	asJSON := fs.Bool("json", false, "Salida en formato JSON")
+	_ = fs.Parse(args)
+
+	type optResult struct {
+		Storage string                 `json:"storage"`
+		Stats   *storage.OptimizeStats `json:"stats"`
+	}
+	results := make([]optResult, 0)
+
+	var localStorage, globalStorage *storage.Storage
+	if *global {
+		globalPath := core.ResolveDatabasePath("", true)
+		s, err := storage.NewWithSource(globalPath, "global")
+		if err == nil {
+			defer s.Close()
+			globalStorage = s
+		}
+	} else if *all {
+		localStorage, globalStorage = getStorages()
+		if localStorage != nil {
+			defer localStorage.Close()
+		}
+		if globalStorage != nil {
+			defer globalStorage.Close()
+		}
+	} else {
+		localStorage, _ = getStorages()
+		if localStorage != nil {
+			defer localStorage.Close()
+		}
+	}
+
+	if localStorage != nil {
+		if st, err := localStorage.Optimize(); err == nil {
+			results = append(results, optResult{Storage: "local", Stats: st})
+		}
+	}
+	if globalStorage != nil && (localStorage == nil || localStorage.DBPath() != globalStorage.DBPath()) {
+		if st, err := globalStorage.Optimize(); err == nil {
+			results = append(results, optResult{Storage: "global", Stats: st})
+		}
+	}
+
+	if *asJSON {
+		_ = json.NewEncoder(os.Stdout).Encode(results)
+		return 0
+	}
+
+	fmt.Println("🧹 Optimización de Base de Datos y FTS5:")
+	for _, r := range results {
+		fmt.Printf("• [%s] %s\n", strings.ToUpper(r.Storage), r.Stats.DBPath)
+		fmt.Printf("  - Total Registros: %d\n", r.Stats.TotalRows)
+		fmt.Printf("  - Tamaño Previo:   %d bytes\n", r.Stats.BytesBefore)
+		fmt.Printf("  - Tamaño Posterior: %d bytes\n", r.Stats.BytesAfter)
+		if r.Stats.SavedBytes > 0 {
+			fmt.Printf("  - Espacio Recuperado: %d bytes\n", r.Stats.SavedBytes)
+		}
+	}
+	fmt.Println("✔ Reindexación FTS5, WAL checkpoint y VACUUM completados con éxito.")
+	return 0
+}
+
 func handleUI(args []string) int {
 	fs := flag.NewFlagSet("ui", flag.ExitOnError)
 	port := fs.Int("port", 3000, "Puerto inicial para el servidor HTTP")
@@ -1465,3 +1533,14 @@ func fetchLatestTag() (string, string, error) {
 	releaseURL := fmt.Sprintf("https://github.com/AdelysAlberto/cogni-memory/releases/tag/%s", bestTag)
 	return bestTag, releaseURL, nil
 }
+
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+

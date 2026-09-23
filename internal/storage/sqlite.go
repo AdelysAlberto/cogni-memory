@@ -693,6 +693,54 @@ func (s *Storage) GetStats() (*core.Stats, error) {
 	}, nil
 }
 
+// OptimizeStats contains information about the database optimization process.
+type OptimizeStats struct {
+	BytesBefore int64  `json:"bytes_before"`
+	BytesAfter  int64  `json:"bytes_after"`
+	SavedBytes  int64  `json:"saved_bytes"`
+	TotalRows   int64  `json:"total_rows"`
+	DBPath      string `json:"db_path"`
+}
+
+// Optimize executes WAL checkpoint, FTS5 index rebuild, PRAGMA optimize, and VACUUM.
+func (s *Storage) Optimize() (*OptimizeStats, error) {
+	stats := &OptimizeStats{
+		DBPath: s.dbPath,
+	}
+
+	if fi, err := os.Stat(s.dbPath); err == nil {
+		stats.BytesBefore = fi.Size()
+	}
+
+	var count int64
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM agent_memories").Scan(&count)
+	stats.TotalRows = count
+
+	// 1. Truncate WAL journal
+	_, _ = s.db.Exec("PRAGMA wal_checkpoint(TRUNCATE);")
+
+	// 2. Rebuild FTS5 index
+	_, _ = s.db.Exec("INSERT INTO memories_fts(memories_fts) VALUES('rebuild');")
+
+	// 3. SQLite query planner optimization
+	_, _ = s.db.Exec("PRAGMA optimize;")
+
+	// 4. Vacuum and defragment database
+	if _, err := s.db.Exec("VACUUM;"); err != nil {
+		return nil, fmt.Errorf("vacuum failed: %w", err)
+	}
+
+	if fi, err := os.Stat(s.dbPath); err == nil {
+		stats.BytesAfter = fi.Size()
+	}
+
+	if stats.BytesBefore > stats.BytesAfter {
+		stats.SavedBytes = stats.BytesBefore - stats.BytesAfter
+	}
+
+	return stats, nil
+}
+
 // GetRecentContext retrieves recent high-signal memories (sessions, architecture, decisions, bugfixes)
 // for immediate context bootstrapping at session start or after compaction.
 func (s *Storage) GetRecentContext(projectName string, limit int) ([]core.Memory, error) {

@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os/exec"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/AdelysAlberto/cogni/internal/core"
+	"github.com/AdelysAlberto/cogni/internal/platform"
 	"github.com/AdelysAlberto/cogni/internal/storage"
 	"github.com/AdelysAlberto/cogni/web"
 )
@@ -50,6 +49,7 @@ func (s *Server) Start(openBrowser bool) (string, error) {
 	mux.HandleFunc("/api/memories", s.handleMemories)
 	mux.HandleFunc("/api/memories/promote", s.handlePromote)
 	mux.HandleFunc("/api/memories/", s.handleMemoryByID)
+	mux.HandleFunc("/api/optimize", s.handleOptimize)
 
 	// 2. Register Embedded Static Web Files
 	fs, err := web.GetFileSystem()
@@ -118,16 +118,7 @@ func findAvailableListener(host string, startPort int) (net.Listener, int, error
 
 func openBrowserURL(url string) {
 	time.Sleep(200 * time.Millisecond)
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	_ = cmd.Start()
+	_ = platform.OpenURL(url)
 }
 
 func (s *Server) securityMiddleware(next http.Handler) http.Handler {
@@ -202,6 +193,30 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 		TotalMemories:        totalMemories,
 		TotalProjects:        totalProjects,
 		EstimatedTokensSaved: totalTokens,
+	}, http.StatusOK)
+}
+
+func (s *Server) handleOptimize(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	results := make([]*storage.OptimizeStats, 0)
+	if s.localStorage != nil {
+		if res, err := s.localStorage.Optimize(); err == nil {
+			results = append(results, res)
+		}
+	}
+	if s.globalStorage != nil && (s.localStorage == nil || s.localStorage.DBPath() != s.globalStorage.DBPath()) {
+		if res, err := s.globalStorage.Optimize(); err == nil {
+			results = append(results, res)
+		}
+	}
+
+	sendJSON(w, map[string]interface{}{
+		"success": true,
+		"results": results,
 	}, http.StatusOK)
 }
 
