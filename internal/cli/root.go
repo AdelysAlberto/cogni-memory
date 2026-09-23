@@ -1067,9 +1067,43 @@ func handleShare(args []string) int {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	// Monitor Relay drop consumption in background so session closes on peer download
+	relayDone := make(chan struct{})
+	if relayPublished {
+		go func() {
+			time.Sleep(1 * time.Second)
+			ticker := time.NewTicker(2 * time.Second)
+			defer ticker.Stop()
+
+			sawExists := false
+			for {
+				select {
+				case <-session.Done():
+					return
+				case <-ticker.C:
+					exists, err := network.CheckRelayDropExists(relayURL, session.Code)
+					if err != nil {
+						continue
+					}
+					if exists {
+						sawExists = true
+					} else if sawExists {
+						// Drop was present and now deleted -> consumed by peer
+						close(relayDone)
+						_ = session.Close()
+						return
+					}
+				}
+			}
+		}()
+	}
+
 	select {
 	case <-sigCh:
 		fmt.Println("\nSesión de compartir cancelada por el usuario.")
+		return 0
+	case <-relayDone:
+		fmt.Println("\n✔ ¡Transferencia completada con éxito vía Relay! La sesión ha sido autodestruida.")
 		return 0
 	case <-session.Done():
 		fmt.Println("\n✔ ¡Transferencia completada con éxito! La sesión ha sido autodestruida.")

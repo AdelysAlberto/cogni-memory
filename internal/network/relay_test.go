@@ -242,3 +242,56 @@ func TestRelayServerDynamicTokenFileHotReload(t *testing.T) {
 	}
 	respNew.Body.Close()
 }
+
+func TestRelayServerHeadMethodAndExistenceCheck(t *testing.T) {
+	rs := NewRelayServer()
+	defer rs.Close()
+
+	handler := rs.Handler()
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	code := "777-k0gni-88"
+	payload := []byte("test payload for HEAD check")
+
+	// 1. Before publishing -> HEAD returns 404
+	exists, err := CheckRelayDropExists(server.URL, code)
+	if err != nil {
+		t.Fatalf("CheckRelayDropExists error: %v", err)
+	}
+	if exists {
+		t.Errorf("Expected false before publish, got true")
+	}
+
+	// 2. Publish drop
+	if err := PublishToRelay(server.URL, code, payload); err != nil {
+		t.Fatalf("PublishToRelay error: %v", err)
+	}
+
+	// 3. After publishing -> HEAD returns 200 (without burning)
+	exists, err = CheckRelayDropExists(server.URL, code)
+	if err != nil {
+		t.Fatalf("CheckRelayDropExists error: %v", err)
+	}
+	if !exists {
+		t.Errorf("Expected true after publish, got false")
+	}
+
+	// 4. Fetch (Burn-After-Reading)
+	data, err := FetchFromRelay(server.URL, code)
+	if err != nil {
+		t.Fatalf("FetchFromRelay error: %v", err)
+	}
+	if string(data) != string(payload) {
+		t.Errorf("Payload mismatch: %s != %s", string(data), string(payload))
+	}
+
+	// 5. After fetch -> HEAD returns 404 (Burned)
+	exists, err = CheckRelayDropExists(server.URL, code)
+	if err != nil {
+		t.Fatalf("CheckRelayDropExists error: %v", err)
+	}
+	if exists {
+		t.Errorf("Expected false after burn, got true")
+	}
+}

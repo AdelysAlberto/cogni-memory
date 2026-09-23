@@ -282,6 +282,34 @@ func FetchFromRelay(relayURL, code string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+// CheckRelayDropExists checks if an encrypted drop is still pending on the relay server without consuming it.
+func CheckRelayDropExists(relayURL, code string) (bool, error) {
+	if relayURL == "" {
+		relayURL = DefaultRelayURL
+	}
+	url := strings.TrimRight(relayURL, "/") + "/api/v1/drop/" + code
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return false, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return false, fmt.Errorf("unexpected status %d", resp.StatusCode)
+}
+
 func fetchLAN(code string) ([]byte, error) {
 	relayURL := os.Getenv("COGNI_RELAY_URL")
 	if relayURL == "" {

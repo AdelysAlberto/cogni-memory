@@ -498,7 +498,7 @@ func (rs *RelayServer) handleDrop(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rs *RelayServer) handleFetch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
 		return
 	}
@@ -511,6 +511,17 @@ func (rs *RelayServer) handleFetch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	codeHash := HashCode(code)
+
+	// HEAD method: Non-destructive existence check (used by sender to detect completion)
+	if r.Method == http.MethodHead {
+		if _, exists := rs.drops.Load(codeHash); !exists {
+			http.Error(w, "Paquete no encontrado o ya consumido", http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	senderIP := extractIP(r)
 
 	// Atomic Burn-After-Reading: load and delete in one step
