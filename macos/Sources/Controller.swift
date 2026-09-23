@@ -23,7 +23,7 @@ public final class CogniController: ObservableObject {
     @Published public var statusMessage: String = "Listo"
 
     // Update Management
-    @Published public var currentVersion: String = "v2.3.1"
+    @Published public var currentVersion: String = "v2.4.0"
     @Published public var latestVersion: String?
     @Published public var releaseURL: String?
     @Published public var hasCheckedUpdate: Bool = false

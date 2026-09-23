@@ -205,7 +205,7 @@ cogni context
 # 2. Buscar memorias con el motor BM25 Cascade
 cogni search --query "modal crash viara navigation"
 
-# 3. Guardar un Machine Engram estructurado
+# 3. Guardar un Machine Engram estructurado (upsert idempotente)
 cogni save \
   --topic-key "arch/nav/modal-stacking" \
   --title "iOS Modal Stacking Fix and Screen Navigation" \
@@ -220,27 +220,41 @@ cogni save \
 cogni get arch/nav/modal-stacking
 cogni get --id 96
 
-# 5. Abrir la app de la barra de menús / Bandeja
+# 5. Cogni Network: Compartir proyecto vía P2P efímero cifrado (E2EE)
+cogni share
+cogni share --project mi-proyecto
+
+# 6. Cogni Network: Sincronizar memorias desde compañero con Safe Fork
+cogni sync 381-c0gn1-42 --from 192.168.1.15:54210
+
+# 7. Mantenimiento físico de base de datos (WAL flush, FTS5 rebuild y VACUUM)
+cogni clean
+
+# 8. Abrir la app de la barra de menús / Bandeja
 cogni bar
 
-# 6. Lanzar la interfaz gráfica en el navegador
+# 9. Lanzar la interfaz gráfica en el navegador
 cogni ui
 
-# 7. Estadísticas de memoria y tokens ahorrados
+# 10. Estadísticas de memoria y tokens ahorrados
 cogni stats
 
-# 8. Actualización atómica resiliente
+# 11. Actualización atómica resiliente
 cogni upgrade
 ```
+
+> Para consultar la lista exhaustiva de banderas, opciones y especificaciones de seguridad, revisa el [Manual Tecnico de Cogni](docs/TECHNICAL_MANUAL.md).
 
 ---
 
 ## Stack Tecnologico y Arquitectura
 
-* **Lenguaje**: Go 1.22+ (Compilacion estatica, binario ligero, sin runtimes externos).
+* **Lenguaje**: Go 1.22+ (Compilacion estatica, binario ligero, sin runtimes externos ni dependencias CGo).
 * **Almacenamiento**: SQLite embebido en modo WAL (`PRAGMA synchronous = NORMAL`, `busy_timeout = 5000`).
 * **Indice Full-Text**: SQLite FTS5 con tabla virtual `memories_fts` sincronizada mediante triggers automaticos de insercion, borrado y actualizacion.
 * **Ranking**: Algoritmo BM25 nativo ponderado por columnas (`bm25(memories_fts, 5.0, 10.0, 2.0, 5.0)`).
+* **Platform Abstraction Layer (PAL)**: Aislamiento nativo por sistema operativo (macOS, Linux, Windows) con deteccion de entornos headless y fallbacks de escritorio.
+* **Cogni Network P2P**: Cifrado autenticado AES-256-GCM, codigos de emparejamiento efimeros de 3 slots y bifurcacion segura ante colisiones (*Safe Fork*).
 * **Protocolo de Agentes**: Servidor MCP nativo sobre transporte stdio (JSON-RPC 2.0).
 * **Web UI**: Dashboard local embebido en el binario via `embed.FS` con servidor HTTP interno.
 
@@ -255,9 +269,14 @@ cogni-memory/
 │   ├── cli/                   # Handlers de comandos CLI e instalacion de arneses
 │   ├── core/                  # Entidades de dominio, resolucion de proyectos y directivas
 │   ├── mcp/                   # Servidor MCP stdio con protocolo JSON-RPC 2.0
+│   ├── network/               # Cogni Network P2P, E2EE AES-GCM, Safe Fork y emparejamiento
+│   ├── platform/              # Platform Abstraction Layer (PAL) para macOS, Linux y Windows
 │   ├── server/                # Servidor HTTP embebido y endpoints REST para Web UI
-│   └── storage/               # Motor SQLite FTS5, BM25 Cascade y persistencia
+│   └── storage/               # Motor SQLite FTS5, BM25 Cascade, WAL checkpoint y VACUUM
+├── macos/                     # Aplicacion nativa para barra de menus en Swift/AppKit
+├── docs/                      # Manuales tecnicos y especificaciones de arquitectura
 ├── web/                       # Assets estaticos embebidos (Dashboard Web UI)
+├── rules/                     # Reglas de ingenieria y aislamiento de plataforma
 ├── SKILL.md                   # Definicion canonica de la Skill para agentes
 ├── Makefile                   # Tareas de compilacion, testing e instalacion
 ├── release.sh                 # Automatizacion de releases
@@ -269,3 +288,4 @@ cogni-memory/
 ## Licencia
 
 Distribuido bajo licencia **MIT**. Consulta el archivo [LICENSE](LICENSE) para mas detalles.
+

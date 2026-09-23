@@ -26,3 +26,5 @@ coverage.txt
 .idea/
 tmp/
 .agents/
+
+docs/

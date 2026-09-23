@@ -18,6 +18,7 @@ import (
 
 	"github.com/AdelysAlberto/cogni/internal/core"
 	"github.com/AdelysAlberto/cogni/internal/mcp"
+	"github.com/AdelysAlberto/cogni/internal/network"
 	"github.com/AdelysAlberto/cogni/internal/server"
 	"github.com/AdelysAlberto/cogni/internal/storage"
 )
@@ -65,6 +66,8 @@ func Execute(args []string) int {
 		return handleRemove(cmdArgs)
 	case "share", "export":
 		return handleShare(cmdArgs)
+	case "sync", "import":
+		return handleSync(cmdArgs)
 	case "list":
 		return handleList(cmdArgs)
 	case "stats":
@@ -113,7 +116,9 @@ Comandos Principales:
   update           Actualiza una memoria existente por su ID
   promote          Promueve una memoria de local a global (o viceversa)
   remove           Elimina una memoria por su ID
-  share            Exporta o comparte firmas de memoria (Markdown / JSON)
+  share            Inicia sesión efímera P2P cifrada o exporta paquete de memorias
+  sync             Sincroniza memorias P2P de un compañero (código 3 slots) o archivo
+  clean, optimize  Compacta SQLite, vacía WAL y reconstruye índice FTS5 (VACUUM)
   list             Lista las memorias registradas
   stats            Muestra métricas y tokens ahorrados
   ui               Abre el dashboard gráfico interactivo en el navegador
@@ -121,6 +126,7 @@ Comandos Principales:
   skill            Instala o actualiza el Skill en tus arneses de IA
   uninstall        Desinstala Cogni, elimina el binario y limpia las skills
   version          Muestra la versión de Cogni
+
 
 Flags de init:
   --project   Inicializa solo el almacén local (.cogni/) en el proyecto actual, sin instalar skills
@@ -937,9 +943,11 @@ func handleRemove(args []string) int {
 func handleShare(args []string) int {
 	fs := flag.NewFlagSet("share", flag.ExitOnError)
 	project := fs.String("project", "", "Filtrar por proyecto")
-	format := fs.String("format", "markdown", "Formato de exportación (markdown, json)")
+	format := fs.String("format", "", "Formato de exportación directa (markdown, json)")
+	outFile := fs.String("out", "", "Guardar paquete cifrado en archivo")
 	global := fs.Bool("global", false, "Base de datos global")
 	dbPath := fs.String("db", "", "Ruta a BD")
+	timeout := fs.Duration("timeout", 5*time.Minute, "Tiempo límite de espera para la sesión")
 
 	_ = fs.Parse(args)
 
@@ -960,25 +968,196 @@ func handleShare(args []string) int {
 		fmt.Fprintf(os.Stderr, "Error listando memorias: %v\n", err)
 		return 1
 	}
+	if len(memories) == 0 {
+		fmt.Fprintf(os.Stderr, "No se encontraron memorias para el proyecto '%s'.\n", projectName)
+		return 1
+	}
 
+	// 1. Exportación clásica a stdout si se especifica --format
 	if *format == "json" {
-		if memories == nil {
-			memories = []core.Memory{}
-		}
 		_ = json.NewEncoder(os.Stdout).Encode(memories)
+		return 0
+	} else if *format == "markdown" {
+		fmt.Printf("# 🧠 Cogni Memory Export — Proyecto: %s\n\n", projectName)
+		fmt.Printf("*Total de firmas: %d*\n\n---\n\n", len(memories))
+		for _, m := range memories {
+			fmt.Printf("### [%s] %s (#%d)\n", m.ProjectName, m.Title, m.ID)
+			fmt.Printf("> **Categoría**: `%s` | **Tags**: `%s` | **Fecha**: %s\n\n", m.Category, m.Tags, m.CreatedAt.Format("2006-01-02 15:04"))
+			fmt.Printf("%s\n\n---\n\n", m.SummarySignature)
+		}
 		return 0
 	}
 
-	// Markdown Export
-	fmt.Printf("# 🧠 Cogni Memory Export — Proyecto: %s\n\n", projectName)
-	fmt.Printf("*Total de firmas: %d*\n\n---\n\n", len(memories))
-
-	for _, m := range memories {
-		fmt.Printf("### [%s] %s (#%d)\n", m.ProjectName, m.Title, m.ID)
-		fmt.Printf("> **Categoría**: `%s` | **Tags**: `%s` | **Fecha**: %s\n\n", m.Category, m.Tags, m.CreatedAt.Format("2006-01-02 15:04"))
-		fmt.Printf("%s\n\n---\n\n", m.SummarySignature)
+	// 2. Exportación a archivo cifrado si se especifica --out
+	if *outFile != "" {
+		code := network.GeneratePairCode()
+		packet := &network.SyncPacket{
+			Version:     "2.4.0",
+			ProjectName: projectName,
+			Timestamp:   time.Now().UTC(),
+			Memories:    memories,
+			Code:        code,
+		}
+		raw, _ := json.Marshal(packet)
+		encrypted, err := network.Encrypt(raw, code)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error cifrando paquete: %v\n", err)
+			return 1
+		}
+		if err := os.WriteFile(*outFile, encrypted, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error escribiendo archivo: %v\n", err)
+			return 1
+		}
+		fmt.Printf("📦 Paquete cifrado exportado en: %s\n", *outFile)
+		fmt.Printf("🔑 Código de descifrado: %s\n", code)
+		fmt.Printf("Su compañero puede importar con: cogni sync %s --code %s\n", *outFile, code)
+		return 0
 	}
 
+	// 3. Cogni Network P2P Sharing efímero
+	session, err := network.StartShareSession(projectName, memories, *timeout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error iniciando sesión P2P: %v\n", err)
+		return 1
+	}
+	defer session.Close()
+
+	fmt.Println()
+	fmt.Printf("🌐 Cogni Network — Compartiendo Proyecto: [%s]\n", projectName)
+	fmt.Println("────────────────────────────────────────────────────────────")
+	fmt.Printf("🔑 Código de Sincronización:  %s\n", session.Code)
+	fmt.Printf("📡 Direcciones de red:\n")
+	primaryAddr := ""
+	for _, addr := range session.Addresses {
+		fmt.Printf("   • %s\n", addr)
+		if primaryAddr == "" && !strings.HasPrefix(addr, "127.0.0.1") {
+			primaryAddr = addr
+		}
+	}
+	if primaryAddr == "" && len(session.Addresses) > 0 {
+		primaryAddr = session.Addresses[0]
+	}
+	fmt.Println("────────────────────────────────────────────────────────────")
+	fmt.Println("Pase este código a su compañero de equipo.")
+	fmt.Printf("Su compañero debe ejecutar en su terminal:\n")
+	fmt.Printf("   cogni sync %s --from %s\n\n", session.Code, primaryAddr)
+	fmt.Println("⏳ Esperando conexión... (Esta sesión se autodestruirá al completarse)")
+	fmt.Println("Presione Ctrl+C para cancelar.")
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	select {
+	case <-sigCh:
+		fmt.Println("\nSesión de compartir cancelada por el usuario.")
+		return 0
+	case <-session.Done():
+		fmt.Println("\n✔ ¡Transferencia completada con éxito! La sesión ha sido autodestruida.")
+		return 0
+	case <-time.After(*timeout):
+		fmt.Println("\n⏰ Tiempo de espera agotado. Sesión cerrada por seguridad.")
+		return 0
+	}
+}
+
+func handleSync(args []string) int {
+	var code string
+	var localFile string
+	var fromAddr string
+	var global bool
+	var dbPath string
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if (arg == "--from" || arg == "-f") && i+1 < len(args) {
+			fromAddr = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "--from=") {
+			fromAddr = strings.TrimPrefix(arg, "--from=")
+		} else if (arg == "--code" || arg == "-c") && i+1 < len(args) {
+			code = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "--code=") {
+			code = strings.TrimPrefix(arg, "--code=")
+		} else if arg == "--global" || arg == "-g" {
+			global = true
+		} else if (arg == "--db") && i+1 < len(args) {
+			dbPath = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "--db=") {
+			dbPath = strings.TrimPrefix(arg, "--db=")
+		} else if !strings.HasPrefix(arg, "-") {
+			if _, err := os.Stat(arg); err == nil && localFile == "" {
+				localFile = arg
+			} else if code == "" {
+				code = arg
+			}
+		}
+	}
+
+	if code == "" && localFile == "" {
+		fmt.Println("Uso: cogni sync <código> --from <host:puerto>")
+		fmt.Println("  o: cogni sync <archivo.cogni> --code <código>")
+		return 1
+	}
+
+	s, err := getStorage(dbPath, global)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error conectando a BD: %v\n", err)
+		return 1
+	}
+	defer s.Close()
+
+
+	if localFile != "" {
+		data, err := os.ReadFile(localFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error leyendo archivo: %v\n", err)
+			return 1
+		}
+		decrypted, err := network.Decrypt(data, code)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error descifrando paquete: %v\n", err)
+			return 1
+		}
+		var packet network.SyncPacket
+		if err := json.Unmarshal(decrypted, &packet); err != nil {
+			fmt.Fprintf(os.Stderr, "Paquete corrupto: %v\n", err)
+			return 1
+		}
+		resp, err := network.MergeMemories(s, packet.Memories, packet.Sender)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error al sincronizar: %v\n", err)
+			return 1
+		}
+		fmt.Printf("✔ Sincronización exitosa desde archivo [%s]:\n", localFile)
+		fmt.Printf("  • Memorias añadidas: %d\n", resp.Inserted)
+		fmt.Printf("  • Conflictos resguardados: %d\n", resp.Conflicts)
+		for _, det := range resp.Details {
+			fmt.Printf("    - %s\n", det)
+		}
+		return 0
+	}
+
+	if fromAddr == "" {
+		fmt.Println("⚠️ Debe especificar la dirección del compañero con --from <host:puerto>")
+		fmt.Printf("Ejemplo: cogni sync %s --from 192.168.1.15:52341\n", code)
+		return 1
+	}
+
+	fmt.Printf("🔄 Conectando con compañero en %s...\n", fromAddr)
+	resp, err := network.SyncFromPeer(s, code, fromAddr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Error en sincronización: %v\n", err)
+		return 1
+	}
+
+	fmt.Println("✔ Sincronización Cogni Network completada con éxito:")
+	fmt.Printf("  • Nuevas memorias añadidas: %d\n", resp.Inserted)
+	fmt.Printf("  • Conflictos resguardados en bifurcaciones seguras: %d\n", resp.Conflicts)
+	for _, det := range resp.Details {
+		fmt.Printf("    - %s\n", det)
+	}
 	return 0
 }
 
