@@ -209,4 +209,3 @@ func TestP2PEphemeralSessionAndSelfDestruct(t *testing.T) {
 		t.Fatalf("Expected second sync to fail because session must self-destruct, but it succeeded")
 	}
 }
-

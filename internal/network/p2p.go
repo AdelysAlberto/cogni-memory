@@ -1,6 +1,7 @@
 package network
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,15 +20,16 @@ import (
 
 // Session represents an ephemeral one-time sharing session.
 type Session struct {
-	Code        string
-	ProjectName string
-	Port        int
-	Addresses   []string
-	doneCh      chan struct{}
-	server      *http.Server
-	listener    net.Listener
-	mu          sync.Mutex
-	closed      bool
+	Code          string
+	ProjectName   string
+	Port          int
+	Addresses     []string
+	EncryptedData []byte
+	doneCh        chan struct{}
+	server        *http.Server
+	listener      net.Listener
+	mu            sync.Mutex
+	closed        bool
 }
 
 // Close shuts down the ephemeral server immediately.
@@ -54,7 +56,6 @@ func (s *Session) Close() error {
 func (s *Session) Done() <-chan struct{} {
 	return s.doneCh
 }
-
 
 // StartShareSession starts an ephemeral one-time peer-to-peer session.
 // Invariant: The session dies immediately upon transfer completion or timeout.
@@ -96,12 +97,13 @@ func StartShareSession(projectName string, memories []core.Memory, timeout time.
 	port := tcpAddr.Port
 
 	session := &Session{
-		Code:        code,
-		ProjectName: projectName,
-		Port:        port,
-		Addresses:   getLocalIPs(port),
-		doneCh:      make(chan struct{}),
-		listener:    listener,
+		Code:          code,
+		ProjectName:   projectName,
+		Port:          port,
+		Addresses:     getLocalIPs(port),
+		EncryptedData: encryptedBytes,
+		doneCh:        make(chan struct{}),
+		listener:      listener,
 	}
 
 	mux := http.NewServeMux()
@@ -219,8 +221,73 @@ func fetchDirect(addr, code string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+const DefaultRelayURL = "https://cogni.viasera.app"
+
+// PublishToRelay uploads an encrypted payload to the relay server.
+func PublishToRelay(relayURL, code string, encryptedData []byte) error {
+	if relayURL == "" {
+		relayURL = DefaultRelayURL
+	}
+	url := strings.TrimRight(relayURL, "/") + "/api/v1/drop"
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("POST", url, bytes.NewReader(encryptedData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("X-Cogni-Code", code)
+	req.Header.Set("Content-Type", "application/octet-stream")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("error conectando con el relay en %s: %w", relayURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("relay rechazó el paquete (HTTP %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// FetchFromRelay downloads and consumes an encrypted payload from the relay server.
+func FetchFromRelay(relayURL, code string) ([]byte, error) {
+	if relayURL == "" {
+		relayURL = DefaultRelayURL
+	}
+	url := strings.TrimRight(relayURL, "/") + "/api/v1/drop/" + code
+
+	client := &http.Client{Timeout: 15 * time.Second}
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("error conectando con el relay en %s: %w", relayURL, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, errors.New("código no encontrado en el servidor (puede haber expirado o ya fue consumido)")
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("relay devolvió error HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return io.ReadAll(resp.Body)
+}
+
 func fetchLAN(code string) ([]byte, error) {
-	return nil, errors.New("especifique la dirección del compañero con --from <host:puerto> o utilice el relay de internet")
+	relayURL := os.Getenv("COGNI_RELAY_URL")
+	if relayURL == "" {
+		relayURL = DefaultRelayURL
+	}
+	return FetchFromRelay(relayURL, code)
 }
 
 func getLocalIPs(port int) []string {

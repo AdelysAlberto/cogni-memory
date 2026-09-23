@@ -38,6 +38,17 @@ macos-package:
 	@chmod +x macos/package.sh
 	./macos/package.sh
 
+relay:
+	@mkdir -p bin
+	go build -ldflags="-s -w -X main.Version=$(VERSION)" -o bin/cogni-relay ./cmd/cogni-relay
+	@echo "✅ Binario cogni-relay compilado en bin/cogni-relay ($(VERSION))"
+
+relay-linux:
+	@mkdir -p bin
+	GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.Version=$(VERSION)" -o bin/cogni-relay-linux-amd64 ./cmd/cogni-relay
+	@echo "✅ Binario cogni-relay para Linux amd64 compilado en bin/cogni-relay-linux-amd64"
+
+
 clean:
 	rm -rf bin/ macos/build/ macos/dist/
 

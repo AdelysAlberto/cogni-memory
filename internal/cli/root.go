@@ -1014,7 +1014,7 @@ func handleShare(args []string) int {
 		return 0
 	}
 
-	// 3. Cogni Network P2P Sharing efímero
+	// 3. Cogni Network P2P Sharing efímero + Publicación en Relay
 	session, err := network.StartShareSession(projectName, memories, *timeout)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error iniciando sesión P2P: %v\n", err)
@@ -1022,11 +1022,24 @@ func handleShare(args []string) int {
 	}
 	defer session.Close()
 
+	relayURL := os.Getenv("COGNI_RELAY_URL")
+	if relayURL == "" {
+		relayURL = network.DefaultRelayURL
+	}
+
+	relayPublished := false
+	if err := network.PublishToRelay(relayURL, session.Code, session.EncryptedData); err == nil {
+		relayPublished = true
+	}
+
 	fmt.Println()
 	fmt.Printf("🌐 Cogni Network — Compartiendo Proyecto: [%s]\n", projectName)
 	fmt.Println("────────────────────────────────────────────────────────────")
 	fmt.Printf("🔑 Código de Sincronización:  %s\n", session.Code)
-	fmt.Printf("📡 Direcciones de red:\n")
+	if relayPublished {
+		fmt.Printf("☁️ Servidor de Encuentro:     %s (Acceso mundial E2EE)\n", relayURL)
+	}
+	fmt.Printf("📡 Direcciones directas:\n")
 	primaryAddr := ""
 	for _, addr := range session.Addresses {
 		fmt.Printf("   • %s\n", addr)
@@ -1039,8 +1052,15 @@ func handleShare(args []string) int {
 	}
 	fmt.Println("────────────────────────────────────────────────────────────")
 	fmt.Println("Pase este código a su compañero de equipo.")
-	fmt.Printf("Su compañero debe ejecutar en su terminal:\n")
-	fmt.Printf("   cogni sync %s --from %s\n\n", session.Code, primaryAddr)
+	if relayPublished {
+		fmt.Printf("Su compañero en cualquier parte del mundo solo debe ejecutar:\n")
+		fmt.Printf("   cogni sync %s\n\n", session.Code)
+		fmt.Printf("O por conexión directa local/VPN:\n")
+		fmt.Printf("   cogni sync %s --from %s\n\n", session.Code, primaryAddr)
+	} else {
+		fmt.Printf("Su compañero debe ejecutar en su terminal:\n")
+		fmt.Printf("   cogni sync %s --from %s\n\n", session.Code, primaryAddr)
+	}
 	fmt.Println("⏳ Esperando conexión... (Esta sesión se autodestruirá al completarse)")
 	fmt.Println("Presione Ctrl+C para cancelar.")
 
@@ -1064,6 +1084,7 @@ func handleSync(args []string) int {
 	var code string
 	var localFile string
 	var fromAddr string
+	var relayURL string
 	var global bool
 	var dbPath string
 
@@ -1074,6 +1095,11 @@ func handleSync(args []string) int {
 			i++
 		} else if strings.HasPrefix(arg, "--from=") {
 			fromAddr = strings.TrimPrefix(arg, "--from=")
+		} else if (arg == "--relay" || arg == "-r") && i+1 < len(args) {
+			relayURL = args[i+1]
+			i++
+		} else if strings.HasPrefix(arg, "--relay=") {
+			relayURL = strings.TrimPrefix(arg, "--relay=")
 		} else if (arg == "--code" || arg == "-c") && i+1 < len(args) {
 			code = args[i+1]
 			i++
@@ -1096,7 +1122,7 @@ func handleSync(args []string) int {
 	}
 
 	if code == "" && localFile == "" {
-		fmt.Println("Uso: cogni sync <código> --from <host:puerto>")
+		fmt.Println("Uso: cogni sync <código> [--from <host:puerto>]")
 		fmt.Println("  o: cogni sync <archivo.cogni> --code <código>")
 		return 1
 	}
@@ -1107,7 +1133,6 @@ func handleSync(args []string) int {
 		return 1
 	}
 	defer s.Close()
-
 
 	if localFile != "" {
 		data, err := os.ReadFile(localFile)
@@ -1139,13 +1164,23 @@ func handleSync(args []string) int {
 		return 0
 	}
 
-	if fromAddr == "" {
-		fmt.Println("⚠️ Debe especificar la dirección del compañero con --from <host:puerto>")
-		fmt.Printf("Ejemplo: cogni sync %s --from 192.168.1.15:52341\n", code)
-		return 1
+	if relayURL != "" {
+		_ = os.Setenv("COGNI_RELAY_URL", relayURL)
 	}
 
-	fmt.Printf("🔄 Conectando con compañero en %s...\n", fromAddr)
+	if fromAddr != "" {
+		fmt.Printf("🔄 Conectando directamente con compañero en %s...\n", fromAddr)
+	} else {
+		targetRelay := relayURL
+		if targetRelay == "" {
+			targetRelay = os.Getenv("COGNI_RELAY_URL")
+		}
+		if targetRelay == "" {
+			targetRelay = network.DefaultRelayURL
+		}
+		fmt.Printf("🔄 Conectando con Cogni Network (%s)...\n", targetRelay)
+	}
+
 	resp, err := network.SyncFromPeer(s, code, fromAddr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Error en sincronización: %v\n", err)
@@ -1722,4 +1757,3 @@ func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
 }
-

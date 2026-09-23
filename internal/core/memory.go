@@ -94,4 +94,3 @@ func Ok[T any](data T) Result[T] {
 func Fail[T any](err string) Result[T] {
 	return Result[T]{Success: false, Error: err}
 }
-

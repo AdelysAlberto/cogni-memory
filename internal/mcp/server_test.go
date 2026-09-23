@@ -96,13 +96,13 @@ func TestMCPServerTools(t *testing.T) {
 
 	// 5. Test cogni_session_summary
 	sessionArgs := map[string]any{
-		"goal":          "Integrar autenticación JWT y optimización de contexto",
-		"accomplished":  "Endpoints de auth creados, migraciones aplicadas",
-		"discoveries":   "Modernc sqlite requiere WAL mode para alta concurrencia",
-		"next_steps":    "Escribir tests de integración E2E",
+		"goal":           "Integrar autenticación JWT y optimización de contexto",
+		"accomplished":   "Endpoints de auth creados, migraciones aplicadas",
+		"discoveries":    "Modernc sqlite requiere WAL mode para alta concurrencia",
+		"next_steps":     "Escribir tests de integración E2E",
 		"relevant_files": "internal/auth/jwt.go, internal/storage/sqlite.go",
-		"project":       "test-project",
-		"topic_key":     "session/latest",
+		"project":        "test-project",
+		"topic_key":      "session/latest",
 	}
 	sessionBytes, _ := json.Marshal(sessionArgs)
 	sessionRes, isErr := server.executeTool("cogni_session_summary", sessionBytes)

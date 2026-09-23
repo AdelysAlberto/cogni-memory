@@ -330,5 +330,3 @@ func TestStorageOptimize(t *testing.T) {
 		t.Errorf("Expected positive BytesAfter, got %d", optStats.BytesAfter)
 	}
 }
-
-

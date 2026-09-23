@@ -351,7 +351,7 @@ func (s *Server) getToolsList() []Tool {
 			},
 		},
 		{
-			Name: "cogni_context",
+			Name:        "cogni_context",
 			Description: "Recupera de forma rápida y compacta el contexto activo reciente del proyecto (sesiones previas, decisiones de arquitectura y fixes recientes) para iniciar la sesión con alta señal y sin inflar el contexto.",
 			InputSchema: &JSONSchema{
 				Type: "object",
@@ -368,7 +368,7 @@ func (s *Server) getToolsList() []Tool {
 			},
 		},
 		{
-			Name: "cogni_update",
+			Name:        "cogni_update",
 			Description: "Actualiza campos de una memoria sintética existente por su ID.",
 			InputSchema: &JSONSchema{
 				Type: "object",
@@ -402,7 +402,7 @@ func (s *Server) getToolsList() []Tool {
 			},
 		},
 		{
-			Name: "cogni_stats",
+			Name:        "cogni_stats",
 			Description: "Obtiene estadísticas de uso de memoria y cantidad de tokens ahorrados.",
 			InputSchema: &JSONSchema{
 				Type:       "object",

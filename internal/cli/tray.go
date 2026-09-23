@@ -7,4 +7,3 @@ import (
 func handleTray(args []string) int {
 	return platform.LaunchTray(args, handleUI)
 }
-
