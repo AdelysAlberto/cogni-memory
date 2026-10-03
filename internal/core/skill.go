@@ -378,7 +378,6 @@ func GetHarnessMCPPaths(homeDir string) map[string][]string {
 	return map[string][]string{
 		"pi": {
 			filepath.Join(homeDir, ".pi", "agent", "mcp.json"),
-			filepath.Join(homeDir, ".pi", "mcp.json"),
 		},
 		"antigravity": {
 			filepath.Join(homeDir, ".gemini", "config", "mcp_config.json"),
