@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/AdelysAlberto/cogni/internal/core"
@@ -50,6 +52,7 @@ func (ft *FlexTags) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MCP Tools Structures
 type Tool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
@@ -57,15 +60,19 @@ type Tool struct {
 }
 
 type JSONSchema struct {
-	Type       string              `json:"type"`
-	Properties map[string]Property `json:"properties,omitempty"`
-	Required   []string            `json:"required,omitempty"`
+	Type                 string              `json:"type"`
+	Properties           map[string]Property `json:"properties"`
+	Required             []string            `json:"required,omitempty"`
+	AdditionalProperties *bool               `json:"additionalProperties,omitempty"`
 }
 
 type Property struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string     `json:"type,omitempty"`
+	Description string     `json:"description,omitempty"`
+	Enum        []string   `json:"enum,omitempty"`
+	Items       *Property  `json:"items,omitempty"`
+	OneOf       []Property `json:"oneOf,omitempty"`
+	Default     any        `json:"default,omitempty"`
 }
 
 type CallToolResult struct {
@@ -78,7 +85,55 @@ type ToolContent struct {
 	Text string `json:"text"`
 }
 
-// Server implements the MCP stdio server for Cogni
+// MCP Resources Structures
+type Resource struct {
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MIMEType    string `json:"mimeType,omitempty"`
+}
+
+type ResourceTemplate struct {
+	URITemplate string `json:"uriTemplate"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	MIMEType    string `json:"mimeType,omitempty"`
+}
+
+type ResourceContent struct {
+	URI      string `json:"uri"`
+	MIMEType string `json:"mimeType,omitempty"`
+	Text     string `json:"text,omitempty"`
+}
+
+type ReadResourceResult struct {
+	Contents []ResourceContent `json:"contents"`
+}
+
+// MCP Prompts Structures
+type PromptArgument struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
+type Prompt struct {
+	Name        string           `json:"name"`
+	Description string           `json:"description,omitempty"`
+	Arguments   []PromptArgument `json:"arguments,omitempty"`
+}
+
+type PromptMessage struct {
+	Role    string      `json:"role"`
+	Content ToolContent `json:"content"`
+}
+
+type GetPromptResult struct {
+	Description string          `json:"description,omitempty"`
+	Messages    []PromptMessage `json:"messages"`
+}
+
+// Server implements the full MCP stdio server for Cogni (Tools, Resources, Prompts)
 type Server struct {
 	version string
 }
@@ -121,7 +176,16 @@ func (s *Server) handleRequest(w io.Writer, req *Request) {
 		result := map[string]any{
 			"protocolVersion": "2024-11-05",
 			"capabilities": map[string]any{
-				"tools": map[string]any{},
+				"tools": map[string]any{
+					"listChanged": false,
+				},
+				"resources": map[string]any{
+					"subscribe":   false,
+					"listChanged": false,
+				},
+				"prompts": map[string]any{
+					"listChanged": false,
+				},
 			},
 			"serverInfo": map[string]any{
 				"name":    "cogni-mcp",
@@ -131,12 +195,12 @@ func (s *Server) handleRequest(w io.Writer, req *Request) {
 		s.sendResult(w, req.ID, result)
 
 	case "notifications/initialized", "initialized":
-		// No response required for notifications
 		return
 
 	case "ping":
 		s.sendResult(w, req.ID, map[string]any{})
 
+	// 1. MCP Tools
 	case "tools/list":
 		tools := s.getToolsList()
 		s.sendResult(w, req.ID, map[string]any{
@@ -158,6 +222,59 @@ func (s *Server) handleRequest(w io.Writer, req *Request) {
 			Content: []ToolContent{{Type: "text", Text: result}},
 			IsError: isErr,
 		})
+
+	// 2. MCP Resources
+	case "resources/list":
+		resources := s.getResourcesList()
+		s.sendResult(w, req.ID, map[string]any{
+			"resources": resources,
+		})
+
+	case "resources/templates/list":
+		templates := s.getResourceTemplatesList()
+		s.sendResult(w, req.ID, map[string]any{
+			"resourceTemplates": templates,
+		})
+
+	case "resources/read":
+		var params struct {
+			URI string `json:"uri"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			s.sendError(w, req.ID, -32602, "Invalid params: "+err.Error())
+			return
+		}
+
+		res, err := s.readResource(params.URI)
+		if err != nil {
+			s.sendError(w, req.ID, -32002, "Resource read error: "+err.Error())
+			return
+		}
+		s.sendResult(w, req.ID, res)
+
+	// 3. MCP Prompts
+	case "prompts/list":
+		prompts := s.getPromptsList()
+		s.sendResult(w, req.ID, map[string]any{
+			"prompts": prompts,
+		})
+
+	case "prompts/get":
+		var params struct {
+			Name      string            `json:"name"`
+			Arguments map[string]string `json:"arguments"`
+		}
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			s.sendError(w, req.ID, -32602, "Invalid params: "+err.Error())
+			return
+		}
+
+		res, err := s.getPrompt(params.Name, params.Arguments)
+		if err != nil {
+			s.sendError(w, req.ID, -32602, "Prompt error: "+err.Error())
+			return
+		}
+		s.sendResult(w, req.ID, res)
 
 	default:
 		s.sendError(w, req.ID, -32601, fmt.Sprintf("Method '%s' not found", req.Method))
@@ -188,227 +305,562 @@ func (s *Server) sendError(w io.Writer, id any, code int, message string) {
 }
 
 func (s *Server) getToolsList() []Tool {
+	additionalPropsFalse := false
+
 	return []Tool{
 		{
 			Name: "cogni_search",
-			Description: "Busca memorias sintéticas de forma ligera (retorna IDs, títulos, tags y resúmenes compactos). " +
-				"Usa este tool en el Preflight Check antes de diseñar o fixear un componente para recuperar patrones previos sin inflar el contexto.",
+			Description: "Search synthetic memories lightly (returns compact previews, IDs, and tags). " +
+				"Use during Preflight Checks before designing or fixing components to recall prior patterns without inflating context.",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"query": {
 						Type:        "string",
-						Description: "Término de búsqueda semántica o palabras clave.",
+						Description: "Semantic search query or keywords to match against memory signatures.",
 					},
 					"project": {
 						Type:        "string",
-						Description: "Nombre del proyecto (opcional, auto-detectado si no se especifica).",
+						Description: "Project name (optional, automatically detected if omitted).",
 					},
 					"category": {
 						Type:        "string",
-						Description: "Filtrar por categoría (bugfix, architecture, decision, discovery, config, pattern, preference, general).",
+						Description: "Filter by memory category (bugfix, architecture, decision, discovery, config, pattern, preference, general).",
 						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
 					},
 					"all_projects": {
 						Type:        "boolean",
-						Description: "Buscar en todos los proyectos ignorando el filtro del proyecto actual (por defecto: false).",
+						Description: "Search across all projects ignoring project boundaries (default: false).",
+						Default:     false,
 					},
 					"limit": {
 						Type:        "integer",
-						Description: "Límite máximo de resultados (por defecto: 5).",
+						Description: "Maximum number of results to return (default: 5).",
+						Default:     5,
 					},
 				},
-				Required: []string{"query"},
+				Required:             []string{"query"},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
 			Name: "cogni_get",
-			Description: "Recupera la memoria sintética completa por ID o por TopicKey determinístico (Protocolo de 2 Fases). " +
-				"Úsalo tras `cogni_search` para hidratar únicamente el registro que necesitas.",
+			Description: "Retrieve the full synthetic memory signature by numeric ID or deterministic TopicKey (2-Step Retrieval Protocol). " +
+				"Use after cogni_search to hydrate only the specific record needed.",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"id": {
 						Type:        "integer",
-						Description: "ID numérico de la memoria a consultar.",
+						Description: "Numeric ID of the memory to fetch.",
 					},
 					"topic_key": {
 						Type:        "string",
-						Description: "TopicKey determinístico (ej: 'arch/auth/jwt', 'pattern/react/modals').",
+						Description: "Deterministic topic key (e.g. 'arch/auth/jwt', 'pattern/react/modals').",
 					},
 					"project": {
 						Type:        "string",
-						Description: "Nombre del proyecto (opcional para filtrar por topic_key).",
+						Description: "Project name (optional when fetching by topic_key).",
 					},
 				},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
 			Name: "cogni_save",
-			Description: "Guarda o actualiza (upsert si topic_key existe) una firma de memoria sintética estructurada de alta densidad. " +
-				"Acepta campos estructurados (what, why, where, learned) o una firma en formato: 'What: <desc> | Why: <motivo> | Where: <archivos> | Learned: <gotchas>'",
+			Description: "Save or upsert a high-density synthetic memory signature into local or global storage. " +
+				"Accepts structured discrete fields (what, why, where, learned) or a pre-built signature string: 'What: ... | Why: ... | Where: ... | Learned: ...'.",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"title": {
 						Type:        "string",
-						Description: "Título conciso del hito o aprendizaje.",
+						Description: "Concise title describing the milestone, decision, or discovery.",
 					},
 					"summary": {
 						Type:        "string",
-						Description: "Firma sintética en formato: 'What: ... | Why: ... | Where: ... | Learned: ...' (opcional si se pasan what/why/where/learned).",
+						Description: "Synthetic signature in format: 'What: ... | Why: ... | Where: ... | Learned: ...' (optional if discrete fields what/why/where/learned are provided).",
 					},
 					"what": {
 						Type:        "string",
-						Description: "Una oración descriptiva de qué se hizo.",
+						Description: "Single descriptive sentence of what was implemented or resolved.",
 					},
 					"why": {
 						Type:        "string",
-						Description: "Motivo o causa raíz de la acción.",
+						Description: "Motivation or root cause behind the change.",
 					},
 					"where": {
 						Type:        "string",
-						Description: "Archivos o rutas afectadas clave.",
+						Description: "Key affected file paths or modules.",
 					},
 					"learned": {
 						Type:        "string",
-						Description: "Aprendizajes, gotchas o casos borde descubiertos.",
+						Description: "Edge cases, gotchas, or lessons learned.",
 					},
 					"category": {
 						Type:        "string",
-						Description: "Categoría de la memoria.",
+						Description: "Memory classification category.",
 						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
 					},
 					"tags": {
-						Type:        "string",
-						Description: "Tags separados por coma en 3 capas (ej: 'auth,jwt,tokens-middleware').",
+						Description: "Tags in 3 tiers. Can be a comma-separated string (e.g. 'auth,jwt,tokens') or an array of tag strings.",
+						OneOf: []Property{
+							{Type: "string"},
+							{Type: "array", Items: &Property{Type: "string"}},
+						},
 					},
 					"topic_key": {
 						Type:        "string",
-						Description: "Clave temática determinística para posibilitar upserts sin duplicar (ej: 'sdd/auth/spec', 'arch/db/indexes').",
+						Description: "Deterministic topic key to enable automatic upsert without duplication (e.g. 'arch/auth/jwt', 'spec/storage/wal').",
 					},
 					"project": {
 						Type:        "string",
-						Description: "Nombre del proyecto (opcional, auto-detectado).",
+						Description: "Project name (optional, automatically detected).",
 					},
 					"global": {
 						Type:        "boolean",
-						Description: "Si es true, se guarda en ~/.cogni/memory.db (global). Por defecto false (local en el proyecto).",
+						Description: "If true, saves into ~/.cogni/memory.db (global cross-project). Default is false (project-local .cogni/).",
+						Default:     false,
 					},
 				},
-				Required: []string{"title", "category", "tags"},
+				Required:             []string{"title", "category", "tags"},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
 			Name: "cogni_session_summary",
-			Description: "Guarda o actualiza un resumen estructurado al finalizar la sesión o tras una compactación (Goal, Accomplished, Discoveries, Next Steps, Relevant Files). " +
-				"Esencial para mantener continuidad entre sesiones y recuperar contexto tras la compactación.",
+			Description: "Save or upsert a structured session milestone or post-compaction summary (Goal, Accomplished, Discoveries, Next Steps, Relevant Files). " +
+				"Vital for maintaining continuity between agent sessions and recovering state after context compaction.",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"goal": {
 						Type:        "string",
-						Description: "Objetivo principal de la sesión de trabajo.",
+						Description: "Primary objective or task worked on during the session.",
 					},
 					"accomplished": {
 						Type:        "string",
-						Description: "Logros y tareas completadas con detalles clave.",
+						Description: "Completed milestones and code changes with technical details.",
 					},
 					"discoveries": {
 						Type:        "string",
-						Description: "Hallazgos técnicos, decisiones o gotchas descubiertos.",
+						Description: "Technical findings, architectural decisions, or gotchas discovered.",
 					},
 					"next_steps": {
 						Type:        "string",
-						Description: "Próximos pasos pendientes para la siguiente sesión.",
+						Description: "Pending tasks or recommendations for the subsequent session.",
 					},
 					"relevant_files": {
 						Type:        "string",
-						Description: "Archivos modificados o creados principales.",
+						Description: "Key modified or created files.",
 					},
 					"instructions": {
 						Type:        "string",
-						Description: "Preferencias o restricciones aprendidas del usuario.",
+						Description: "User preferences or constraints learned during the session.",
 					},
 					"topic_key": {
 						Type:        "string",
-						Description: "Clave determinística (por defecto: 'session/latest').",
+						Description: "Deterministic key for the session (default: 'session/latest').",
+						Default:     "session/latest",
 					},
 					"project": {
 						Type:        "string",
-						Description: "Nombre del proyecto (opcional).",
+						Description: "Project name (optional).",
 					},
 					"tags": {
 						Type:        "string",
-						Description: "Tags adicionales separados por coma.",
+						Description: "Additional comma-separated tags.",
 					},
 					"global": {
 						Type:        "boolean",
-						Description: "Guardar en BD global (~/.cogni/). Por defecto false (local).",
+						Description: "Save into global storage (~/.cogni/). Default is false (local).",
+						Default:     false,
 					},
 				},
-				Required: []string{"goal", "accomplished"},
+				Required:             []string{"goal", "accomplished"},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
-			Name:        "cogni_context",
-			Description: "Recupera de forma rápida y compacta el contexto activo reciente del proyecto (sesiones previas, decisiones de arquitectura y fixes recientes) para iniciar la sesión con alta señal y sin inflar el contexto.",
+			Name: "cogni_context",
+			Description: "Quickly retrieve recent active context for the project (previous sessions, architecture decisions, and bugfixes) " +
+				"to bootstrap sessions with high signal and minimal tokens (< 100 tokens).",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"project": {
 						Type:        "string",
-						Description: "Nombre del proyecto (opcional, auto-detectado).",
+						Description: "Project name (optional, automatically detected).",
 					},
 					"limit": {
 						Type:        "integer",
-						Description: "Límite máximo de memorias recientes (por defecto: 5).",
+						Description: "Maximum number of recent memories to return (default: 5).",
+						Default:     5,
 					},
 				},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
 			Name:        "cogni_update",
-			Description: "Actualiza campos de una memoria sintética existente por su ID.",
+			Description: "Update fields of an existing synthetic memory by its numeric ID.",
 			InputSchema: &JSONSchema{
 				Type: "object",
 				Properties: map[string]Property{
 					"id": {
 						Type:        "integer",
-						Description: "ID de la memoria a actualizar.",
+						Description: "Numeric ID of the memory to update.",
 					},
 					"summary": {
 						Type:        "string",
-						Description: "Nueva firma sintética.",
+						Description: "Updated synthetic signature string.",
 					},
 					"title": {
 						Type:        "string",
-						Description: "Nuevo título.",
+						Description: "Updated title.",
 					},
 					"category": {
 						Type:        "string",
-						Description: "Nueva categoría.",
+						Description: "Updated category.",
 					},
 					"tags": {
 						Type:        "string",
-						Description: "Nuevos tags.",
+						Description: "Updated tags.",
 					},
 					"topic_key": {
 						Type:        "string",
-						Description: "Nuevo topic_key.",
+						Description: "Updated deterministic topic key.",
 					},
 				},
-				Required: []string{"id"},
+				Required:             []string{"id"},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
 		{
 			Name:        "cogni_stats",
-			Description: "Obtiene estadísticas de uso de memoria y cantidad de tokens ahorrados.",
+			Description: "Retrieve memory usage statistics and estimated tokens saved across sessions.",
 			InputSchema: &JSONSchema{
-				Type:       "object",
-				Properties: map[string]Property{},
+				Type:                 "object",
+				Properties:           map[string]Property{},
+				AdditionalProperties: &additionalPropsFalse,
 			},
 		},
+	}
+}
+
+// Resources Implementation
+func (s *Server) getResourcesList() []Resource {
+	return []Resource{
+		{
+			URI:         "cogni://context/recent",
+			Name:        "recent-project-context",
+			Description: "Active context, recent architectural decisions, and bugfix signatures for the current workspace",
+			MIMEType:    "application/json",
+		},
+		{
+			URI:         "cogni://session/latest",
+			Name:        "latest-session-summary",
+			Description: "Latest recorded session summary and pending next steps for the current workspace",
+			MIMEType:    "application/json",
+		},
+	}
+}
+
+func (s *Server) getResourceTemplatesList() []ResourceTemplate {
+	return []ResourceTemplate{
+		{
+			URITemplate: "cogni://memory/{id}",
+			Name:        "memory-by-id",
+			Description: "Retrieve full synthetic memory signature by numeric ID",
+			MIMEType:    "application/json",
+		},
+		{
+			URITemplate: "cogni://topic/{topic_key}",
+			Name:        "memory-by-topic-key",
+			Description: "Retrieve full synthetic memory signature by deterministic TopicKey",
+			MIMEType:    "application/json",
+		},
+	}
+}
+
+func (s *Server) readResource(rawURI string) (*ReadResourceResult, error) {
+	localStorage, globalStorage := s.getStorages()
+	if localStorage != nil {
+		defer localStorage.Close()
+	}
+	if globalStorage != nil {
+		defer globalStorage.Close()
+	}
+
+	parsedURI, _ := url.Parse(rawURI)
+	var queryProject string
+	if parsedURI != nil {
+		queryProject = parsedURI.Query().Get("project")
+	}
+
+	project := queryProject
+	if project == "" {
+		project = core.DetectProjectName()
+	}
+	if project == "/" || project == "." || project == "default_project" {
+		project = ""
+	}
+
+	cleanURI := rawURI
+	if parsedURI != nil {
+		cleanURI = fmt.Sprintf("%s://%s%s", parsedURI.Scheme, parsedURI.Host, parsedURI.Path)
+	}
+
+	switch {
+	case cleanURI == "cogni://context/recent":
+		var memories []core.Memory
+		if localStorage != nil {
+			mems, _ := localStorage.GetRecentContext(project, 5)
+			if len(mems) == 0 && project != "" {
+				// Fallback to all memories in project-local storage
+				mems, _ = localStorage.GetRecentContext("", 5)
+			}
+			memories = append(memories, mems...)
+		}
+		if globalStorage != nil && len(memories) < 5 {
+			mems, _ := globalStorage.GetRecentContext(project, 5-len(memories))
+			memories = append(memories, mems...)
+		}
+		data, err := json.MarshalIndent(memories, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      rawURI,
+					MIMEType: "application/json",
+					Text:     string(data),
+				},
+			},
+		}, nil
+
+	case cleanURI == "cogni://session/latest":
+		var mem *core.Memory
+		if localStorage != nil {
+			mem, _ = localStorage.GetMemoryByTopicKey(project, "session/latest")
+			if mem == nil && project != "" {
+				mem, _ = localStorage.GetMemoryByTopicKey("", "session/latest")
+			}
+		}
+		if mem == nil && globalStorage != nil {
+			mem, _ = globalStorage.GetMemoryByTopicKey(project, "session/latest")
+			if mem == nil && project != "" {
+				mem, _ = globalStorage.GetMemoryByTopicKey("", "session/latest")
+			}
+		}
+		if mem == nil {
+			return &ReadResourceResult{
+				Contents: []ResourceContent{
+					{
+						URI:      rawURI,
+						MIMEType: "application/json",
+						Text:     `{"status": "no_recent_session"}`,
+					},
+				},
+			}, nil
+		}
+		data, err := json.MarshalIndent(mem, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      rawURI,
+					MIMEType: "application/json",
+					Text:     string(data),
+				},
+			},
+		}, nil
+
+	case strings.HasPrefix(cleanURI, "cogni://memory/"):
+		idStr := strings.TrimPrefix(cleanURI, "cogni://memory/")
+		id, err := strconv.ParseInt(idStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("invalid memory ID in URI '%s': %w", rawURI, err)
+		}
+		var mem *core.Memory
+		if localStorage != nil {
+			mem, _ = localStorage.GetMemoryByID(id)
+		}
+		if mem == nil && globalStorage != nil {
+			mem, _ = globalStorage.GetMemoryByID(id)
+		}
+		if mem == nil {
+			return nil, fmt.Errorf("memory #%d not found", id)
+		}
+		data, err := json.MarshalIndent(mem, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      rawURI,
+					MIMEType: "application/json",
+					Text:     string(data),
+				},
+			},
+		}, nil
+
+	case strings.HasPrefix(cleanURI, "cogni://topic/"):
+		topicKey := strings.TrimPrefix(cleanURI, "cogni://topic/")
+		var mem *core.Memory
+		if localStorage != nil {
+			mem, _ = localStorage.GetMemoryByTopicKey(project, topicKey)
+			if mem == nil && project != "" {
+				mem, _ = localStorage.GetMemoryByTopicKey("", topicKey)
+			}
+		}
+		if mem == nil && globalStorage != nil {
+			mem, _ = globalStorage.GetMemoryByTopicKey(project, topicKey)
+			if mem == nil && project != "" {
+				mem, _ = globalStorage.GetMemoryByTopicKey("", topicKey)
+			}
+		}
+		if mem == nil {
+			return nil, fmt.Errorf("memory for topic_key '%s' not found", topicKey)
+		}
+		data, err := json.MarshalIndent(mem, "", "  ")
+		if err != nil {
+			return nil, err
+		}
+		return &ReadResourceResult{
+			Contents: []ResourceContent{
+				{
+					URI:      rawURI,
+					MIMEType: "application/json",
+					Text:     string(data),
+				},
+			},
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown resource URI: %s", rawURI)
+	}
+}
+
+// Prompts Implementation
+func (s *Server) getPromptsList() []Prompt {
+	return []Prompt{
+		{
+			Name:        "cogni_preflight_check",
+			Description: "Prompt template to execute preflight memory search before designing or implementing a feature or bugfix",
+			Arguments: []PromptArgument{
+				{
+					Name:        "task",
+					Description: "Description or technical domain of the task to be performed",
+					Required:    true,
+				},
+				{
+					Name:        "project",
+					Description: "Project name (optional, automatically detected)",
+					Required:    false,
+				},
+			},
+		},
+		{
+			Name:        "cogni_session_summary",
+			Description: "Prompt template to guide creating and persisting an end-of-session or post-compaction summary into Cogni",
+			Arguments: []PromptArgument{
+				{
+					Name:        "goal",
+					Description: "Primary objective worked on",
+					Required:    true,
+				},
+				{
+					Name:        "accomplished",
+					Description: "Tasks, milestones, and code changes completed",
+					Required:    true,
+				},
+				{
+					Name:        "discoveries",
+					Description: "Gotchas, lessons learned, or architectural decisions",
+					Required:    false,
+				},
+				{
+					Name:        "next_steps",
+					Description: "Pending items for the next session",
+					Required:    false,
+				},
+			},
+		},
+	}
+}
+
+func (s *Server) getPrompt(name string, args map[string]string) (*GetPromptResult, error) {
+	switch name {
+	case "cogni_preflight_check":
+		task := args["task"]
+		if task == "" {
+			return nil, fmt.Errorf("missing required argument 'task'")
+		}
+		project := args["project"]
+		if project == "" {
+			project = core.DetectProjectName()
+		}
+
+		promptText := fmt.Sprintf(
+			"Please perform a Cogni Preflight Memory Check for project '%s'.\n"+
+				"1. Call cogni_search(query: \"%s\", project: \"%s\") to check for existing architecture decisions, conventions, or bugfixes.\n"+
+				"2. If relevant records are found, call cogni_get with the ID or TopicKey to hydrate the complete signature.\n"+
+				"3. Adhere strictly to the retrieved architectural invariants before proceeding with implementation.",
+			project, task, project,
+		)
+
+		return &GetPromptResult{
+			Description: "Preflight Check instructions for Cogni memory retrieval",
+			Messages: []PromptMessage{
+				{
+					Role: "user",
+					Content: ToolContent{
+						Type: "text",
+						Text: promptText,
+					},
+				},
+			},
+		}, nil
+
+	case "cogni_session_summary":
+		goal := args["goal"]
+		accomplished := args["accomplished"]
+		if goal == "" || accomplished == "" {
+			return nil, fmt.Errorf("arguments 'goal' and 'accomplished' are required")
+		}
+		discoveries := args["discoveries"]
+		nextSteps := args["next_steps"]
+
+		promptText := fmt.Sprintf(
+			"Persist session progress to Cogni by calling cogni_session_summary with:\n"+
+				"- goal: %s\n"+
+				"- accomplished: %s\n"+
+				"- discoveries: %s\n"+
+				"- next_steps: %s\n"+
+				"- topic_key: 'session/latest'",
+			goal, accomplished, discoveries, nextSteps,
+		)
+
+		return &GetPromptResult{
+			Description: "Session Summary persistence prompt",
+			Messages: []PromptMessage{
+				{
+					Role: "user",
+					Content: ToolContent{
+						Type: "text",
+						Text: promptText,
+					},
+				},
+			},
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown prompt: %s", name)
 	}
 }
 
@@ -447,7 +899,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			AllProjects bool   `json:"all_projects"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 		if args.Limit <= 0 {
 			args.Limit = 5
@@ -483,12 +935,11 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if len(results) == 0 {
-			return "No se encontraron memorias para la búsqueda: " + args.Query, false
+			return "No memories found for query: " + args.Query, false
 		}
 
-		// Retornar formato ligero (ID, TopicKey, Title, Preview de 1 línea, Tags) para ahorrar tokens
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("🔍 Encontradas %d memoria(s) [Usa cogni_get con ID o TopicKey para ver el contenido completo]:\n\n", len(results)))
+		sb.WriteString(fmt.Sprintf("🔍 Found %d memory signature(s) [Use cogni_get with ID or TopicKey to view full signature]:\n\n", len(results)))
 		for _, m := range results {
 			srcBadge := "LOCAL"
 			if m.Source == "global" {
@@ -517,7 +968,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			Project  string `json:"project"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 
 		project := args.Project
@@ -543,14 +994,14 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 				mem, err = globalStorage.GetMemoryByTopicKey(project, args.TopicKey)
 			}
 		} else {
-			return "Error: Debes especificar 'id' o 'topic_key'.", true
+			return "Error: You must specify either 'id' or 'topic_key'.", true
 		}
 
 		if err != nil {
-			return "Error recuperando memoria: " + err.Error(), true
+			return "Error retrieving memory: " + err.Error(), true
 		}
 		if mem == nil {
-			return "Memoria no encontrada.", false
+			return "Memory signature not found.", false
 		}
 
 		var sb strings.Builder
@@ -558,8 +1009,8 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		if mem.TopicKey != "" {
 			sb.WriteString(fmt.Sprintf("🔑 Topic Key: %s\n", mem.TopicKey))
 		}
-		sb.WriteString(fmt.Sprintf("📂 Categoría: %s | 🏷️ Tags: %s\n", mem.Category, mem.Tags))
-		sb.WriteString(fmt.Sprintf("📅 Fecha: %s\n\n", mem.UpdatedAt.Format("2006-01-02 15:04:05")))
+		sb.WriteString(fmt.Sprintf("📂 Category: %s | 🏷️ Tags: %s\n", mem.Category, mem.Tags))
+		sb.WriteString(fmt.Sprintf("📅 Date: %s\n\n", mem.UpdatedAt.Format("2006-01-02 15:04:05")))
 		sb.WriteString(fmt.Sprintf("📝 %s\n", mem.SummarySignature))
 
 		return sb.String(), false
@@ -579,11 +1030,11 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			Global   bool     `json:"global"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 
 		if args.Title == "" {
-			return "Error: 'title' es requerido.", true
+			return "Error: 'title' is required.", true
 		}
 
 		finalSummary := args.Summary
@@ -592,7 +1043,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if finalSummary == "" {
-			return "Error: Debes proporcionar 'summary' o los campos estructurados 'what', 'why', 'where', 'learned'.", true
+			return "Error: You must provide either 'summary' or discrete fields 'what', 'why', 'where', 'learned'.", true
 		}
 
 		if args.Category == "" {
@@ -609,7 +1060,6 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			targetStorage = globalStorage
 		} else {
 			if localStorage == nil {
-				// Crear local si no existe
 				localDir := filepath.Join(".", ".cogni")
 				_ = os.MkdirAll(localDir, 0755)
 				localPath := filepath.Join(localDir, "memory.db")
@@ -623,7 +1073,6 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if targetStorage == nil {
-			// Fallback de emergencia a la base de datos global de usuario
 			homeDir, _ := os.UserHomeDir()
 			if homeDir != "" {
 				globalDir := filepath.Join(homeDir, ".cogni")
@@ -634,7 +1083,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if targetStorage == nil {
-			return "Error: No se pudo inicializar el almacenamiento.", true
+			return "Error: Could not initialize database storage.", true
 		}
 
 		formattedTags := core.FormatTags(string(args.Tags), project)
@@ -649,7 +1098,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 
 		saved, err := targetStorage.SaveMemory(mem)
 		if err != nil {
-			return "Error guardando memoria: " + err.Error(), true
+			return "Error saving memory: " + err.Error(), true
 		}
 
 		dest := "LOCAL"
@@ -657,7 +1106,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			dest = "GLOBAL"
 		}
 
-		return fmt.Sprintf("💾 Memoria guardada [%s #%d]: [%s] \"%s\" (Category: #%s, Tags: %s)",
+		return fmt.Sprintf("💾 Memory saved [%s #%d]: [%s] \"%s\" (Category: #%s, Tags: %s)",
 			dest, saved.ID, saved.ProjectName, saved.Title, saved.Category, saved.Tags), false
 
 	case "cogni_session_summary":
@@ -674,11 +1123,11 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			Global        bool   `json:"global"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 
 		if args.Goal == "" || args.Accomplished == "" {
-			return "Error: 'goal' y 'accomplished' son requeridos para el resumen de sesión.", true
+			return "Error: 'goal' and 'accomplished' are required for session summary.", true
 		}
 
 		project := args.Project
@@ -700,7 +1149,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if targetStorage == nil {
-			return "Error: No se pudo inicializar el almacenamiento.", true
+			return "Error: Could not initialize storage.", true
 		}
 
 		sessionSummary := core.SessionSummary{
@@ -714,7 +1163,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 
 		saved, err := targetStorage.SaveSessionSummary(project, args.TopicKey, sessionSummary, args.Tags)
 		if err != nil {
-			return "Error guardando resumen de sesión: " + err.Error(), true
+			return "Error saving session summary: " + err.Error(), true
 		}
 
 		dest := "LOCAL"
@@ -722,7 +1171,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			dest = "GLOBAL"
 		}
 
-		return fmt.Sprintf("📋 Resumen de sesión persistido [%s #%d]: [%s] \"%s\" (TopicKey: %s)\n%s",
+		return fmt.Sprintf("📋 Session summary persisted [%s #%d]: [%s] \"%s\" (TopicKey: %s)\n%s",
 			dest, saved.ID, saved.ProjectName, saved.Title, saved.TopicKey, saved.SummarySignature), false
 
 	case "cogni_context":
@@ -731,7 +1180,7 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			Limit   int    `json:"limit"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 		if args.Limit <= 0 {
 			args.Limit = 5
@@ -752,11 +1201,11 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if len(memories) == 0 {
-			return fmt.Sprintf("No hay contexto reciente guardado para el proyecto '%s'.", project), false
+			return fmt.Sprintf("No active context found for project '%s'.", project), false
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("⚡ Contexto Activo Reciente para '%s' (%d memorias clave):\n\n", project, len(memories)))
+		sb.WriteString(fmt.Sprintf("⚡ Active Context for '%s' (%d key signatures):\n\n", project, len(memories)))
 		for _, m := range memories {
 			srcBadge := "LOCAL"
 			if m.Source == "global" {
@@ -781,10 +1230,10 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			TopicKey string `json:"topic_key"`
 		}
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return "Error parseando argumentos: " + err.Error(), true
+			return "Error parsing arguments: " + err.Error(), true
 		}
 		if args.ID <= 0 {
-			return "Error: 'id' es requerido.", true
+			return "Error: 'id' is required.", true
 		}
 
 		var targetStorage *storage.Storage
@@ -800,15 +1249,15 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 		}
 
 		if targetStorage == nil {
-			return fmt.Sprintf("Memoria #%d no encontrada.", args.ID), true
+			return fmt.Sprintf("Memory #%d not found.", args.ID), true
 		}
 
 		updated, err := targetStorage.UpdateMemory(args.ID, args.Title, args.Summary, args.Category, args.Tags, args.TopicKey)
 		if err != nil {
-			return "Error actualizando memoria: " + err.Error(), true
+			return "Error updating memory: " + err.Error(), true
 		}
 
-		return fmt.Sprintf("🔄 Memoria #%d actualizada con éxito: \"%s\"", updated.ID, updated.Title), false
+		return fmt.Sprintf("🔄 Memory #%d updated successfully: \"%s\"", updated.ID, updated.Title), false
 
 	case "cogni_stats":
 		var stats *core.Stats
@@ -819,13 +1268,13 @@ func (s *Server) executeTool(name string, argsRaw json.RawMessage) (string, bool
 			stats, _ = globalStorage.GetStats()
 		}
 		if stats == nil {
-			return "No se pudieron obtener estadísticas.", true
+			return "Could not retrieve statistics.", true
 		}
 
-		return fmt.Sprintf("📊 Estadísticas de Cogni:\n- Total Memorias: %d\n- Proyectos: %d\n- Tokens Estimados Ahorrados: ~%d tokens",
+		return fmt.Sprintf("📊 Cogni Memory Statistics:\n- Total Memories: %d\n- Projects: %d\n- Estimated Tokens Saved: ~%d tokens",
 			stats.TotalMemories, stats.TotalProjects, stats.EstimatedTokensSaved), false
 
 	default:
-		return fmt.Sprintf("Herramienta desconocida: %s", name), true
+		return fmt.Sprintf("Unknown tool: %s", name), true
 	}
 }

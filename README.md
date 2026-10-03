@@ -182,17 +182,31 @@ cogni init --all
 
 ---
 
-## Herramientas MCP Nativas
+## Protocolo MCP Nativo (Tools, Resources & Prompts)
 
-Al conectarse via Model Context Protocol, el agente dispone de las siguientes capacidades:
+Cogni implementa la especificacion completa de Model Context Protocol (MCP 2024-11-05), exponiendo la triada canonica de capacidades:
 
-* **`cogni_search(query, project, category, all_projects, limit)`**: Busqueda compacta con clasificacion BM25 y desborde entre proyectos. Devuelve ID, TopicKey, titulo y resumen en ~35 tokens por resultado.
-* **`cogni_get(id, topic_key, project)`**: Hidratacion completa del registro seleccionado en Fase 2.
+### 1. Herramientas Activas (Tools)
+* **`cogni_search(query, project, category, all_projects, limit)`**: Busqueda compacta con clasificacion BM25 y desborde entre proyectos. Devuelve ID, TopicKey, titulo y preview en ~35 tokens por resultado.
+* **`cogni_get(id, topic_key, project)`**: Hidratacion completa del registro seleccionado en Fase 2 (por ID o TopicKey).
 * **`cogni_save(title, summary, what, why, where, learned, category, tags, topic_key, project, global)`**: Guardado estructurado o upsert automatico si el `topic_key` ya existe.
 * **`cogni_update(id, title, summary, category, tags, topic_key)`**: Actualizacion puntual de registros por ID.
 * **`cogni_context(project, limit)`**: Recuperacion instantanea de hitos recientes y convenciones activas al arrancar sesion o tras compactacion (<100 tokens).
 * **`cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files)`**: Persistencia de progreso al finalizar sesion o tras compactacion.
 * **`cogni_stats()`**: Auditoria de salud de memoria y tokens reales ahorrados.
+
+### 2. Recursos Pasivos (Resources)
+Permiten a los clientes MCP inyectar contexto directamente al prompt de usuario sin consumir llamadas activas de herramientas:
+* **`cogni://context/recent`**: Contexto activo reciente y firmas arquitectonicas del workspace en formato JSON.
+* **`cogni://session/latest`**: Ultimo resumen de sesion persistido y proximos pasos en formato JSON.
+* **`cogni://memory/{id}`**: Plantilla de recurso para consultar cualquier memoria por su ID numerico.
+* **`cogni://topic/{topic_key}`**: Plantilla de recurso para consultar cualquier memoria por su clave deterministica.
+
+### 3. Plantillas Guiadas (Prompts)
+* **`cogni_preflight_check(task, project)`**: Plantilla guiada para ejecutar comprobacion previa de memorias antes de disenar o implementar.
+* **`cogni_session_summary(goal, accomplished, discoveries, next_steps)`**: Plantilla guiada para estructurar el cierre de sesion.
+
+> **Regla de Invocacion para Agentes**: Si el servidor MCP de Cogni esta conectado al arnes, el agente debe invocar siempre las herramientas nativas MCP directamente. Los comandos CLI de terminal quedan reservados exclusivamente como fallback en entornos sin soporte MCP.
 
 ---
 

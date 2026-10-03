@@ -1,6 +1,6 @@
 ---
 name: cogni
-description: Autonomous local memory system to query and store synthetic semantic signatures in SQLite, reducing token consumption by up to 95% across AI Agent environments (Antigravity, Cursor, Claude, Copilot, OpenCode, Hermes, Codex).
+description: Autonomous persistent project memory and semantic signatures in SQLite. Use when: (1) starting non-trivial tasks, architecture changes, or bugfixes to recall prior decisions (preflight search), (2) saving high-signal technical decisions, schemas, root causes, and gotchas (postflight save), (3) restoring state after context compaction.
 ---
 
 # 🧠 Cogni Skill (Autonomous AI Agent Memory System)
@@ -13,6 +13,22 @@ Its primary objective is to maintain architectural consistency across chat sessi
 
 ---
 
+## ⚡ Tool Invocation Hierarchy (MCP vs. CLI)
+
+Always respect the following priority order:
+
+1. **Tier 1: Native MCP Tools (ALWAYS PREFERRED)**
+   - When the Cogni MCP server is connected (`cogni_search`, `cogni_get`, `cogni_save`, `cogni_context`, `cogni_session_summary`, `cogni_update`, `cogni_stats`):
+   - **USE MCP TOOLS DIRECTLY**.
+   - Do NOT run terminal shell commands (`run_command`, `bash`, `exec`) when MCP tools are available. MCP provides typed JSON Schema validation, faster zero-process execution, and respects agent sandboxing.
+2. **Tier 2: MCP Resources & Prompts (Passive Context & Workflows)**
+   - Read `cogni://context/recent` or `cogni://session/latest` for passive context without consuming tool execution rounds.
+   - Use MCP Prompts `cogni_preflight_check` and `cogni_session_summary` when guided templates are requested.
+3. **Tier 3: Terminal CLI Commands (Fallback Only)**
+   - Use `cogni <subcommand>` via shell ONLY if the agent environment does NOT have the MCP server connected or is running in a raw terminal script.
+
+---
+
 ## ⚡ Autonomous Agent Operating Directives
 
 ### 1. Two-Step Retrieval & Smart Task Tag-Matching
@@ -20,26 +36,36 @@ To prevent context inflation and avoid re-analyzing codebases:
 
 - **Step 1: Lightweight Search (Discovery & Task Matching)**
   When requested to do any non-trivial task or bugfix, extract the main technical concept/tags from the prompt and execute a compact search:
+  ```json
+  // MCP Tool Call (Preferred):
+  cogni_search({ "query": "auth jwt", "category": "architecture" })
+  ```
   ```bash
-  cogni search --query "<keywords_or_tags>"
-  # Or via MCP Tool: cogni_search(query: "auth jwt")
+  # CLI Fallback (if no MCP):
+  cogni search --query "auth jwt"
   ```
 - **Step 2: Full Content Hydration (Only for matching IDs/Keys)**
   Retrieve the complete synthetic signature only for the relevant ID or TopicKey to know exactly how to address the task without reading large files:
+  ```json
+  // MCP Tool Call (Preferred):
+  cogni_get({ "id": 6 })
+  // Or:
+  cogni_get({ "topic_key": "arch/auth/jwt" })
+  ```
   ```bash
-  cogni get <id_or_topic_key>
-  # Or via MCP Tool: cogni_get(id: 6) / cogni_get(topic_key: "arch/auth/jwt")
+  # CLI Fallback (if no MCP):
+  cogni get arch/auth/jwt
   ```
 - **Step 0: Quick Context Bootstrapping (`cogni_context`)**
   At session start or after compaction, call `cogni_context` to load recent sessions, decisions, and active conventions in under 100 tokens.
 
 ### 1.1 Proactive Preflight Search (Mandatory Triggers)
-- **Architecture / New Feature**: Before proposing, designing, or scaffolding a new technical pattern, database table, API, state store, or auth flow, execute `cogni search` on the domain keyword.
+- **Architecture / New Feature**: Before proposing, designing, or scaffolding a new technical pattern, database table, API, state store, or auth flow, execute `cogni_search` on the domain keyword.
 - **Pre-fix Search**: Before implementing non-trivial bugfixes, search for previous resolutions in that module/error area.
 - Adhere strictly to retrieved architectural patterns and previous decisions.
 
 ### 2. High-Signal Threshold & When to Save (Postflight Gate)
-**GOLDEN RULE**: Call `cogni save` (or `cogni_save`) ONLY if: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
+**GOLDEN RULE**: Call `cogni_save` (or `cogni save`) ONLY if: *If this memory signature does not exist in the future, will an agent waste time investigating, break an architecture, or make a mistake?*
 
 **DELIVERY GUARANTEE (Saving is not replying)**:
 - Saving to memory is internal bookkeeping. It NEVER counts as answering the user.
@@ -76,8 +102,8 @@ Summary: Trigger: Modal stacking error on iOS | Invariant: RCTModalHostViewContr
 ```
 
 ### 4. Diagnostic & Maintenance Tooling
-- **`cogni stats` / `cogni_stats()`**: Displays memory health, entry count, and estimated token savings metrics.
-- **`cogni session_summary` / `cogni_session_summary()`**: Summarizes progress, discoveries, and next steps to resume context without reloading long chat histories.
+- **`cogni_stats()` / `cogni stats`**: Displays memory health, entry count, and estimated token savings metrics.
+- **`cogni_session_summary()` / `cogni session-summary`**: Summarizes progress, discoveries, and next steps to resume context without reloading long chat histories.
 
 ### 5. Compaction & Session Lifecycle Protocol
 
@@ -97,23 +123,33 @@ If a compaction message or reset occurs:
 
 ### 6. Deterministic Topic Keys & Automatic Upserts
 To prevent duplicate records:
-- Format: `<domain>/<subdomain>/<topic>` (ej. `arch/auth/jwt`, `standards/i18n/ui`, `session/latest`).
-- When a `--topic-key` already exists, `cogni save` automatically updates (**upserts**) the record.
+- Format: `<domain>/<subdomain>/<topic>` (e.g. `arch/auth/jwt`, `standards/i18n/ui`, `session/latest`).
+- When a `topic_key` already exists, `cogni_save` automatically updates (**upserts**) the record.
 
 ---
 
-## 🛠️ Tooling & CLI Reference
+## 🛠️ Complete MCP Specification Reference
 
-### Native MCP Tools:
+### 1. Native MCP Tools:
 - `cogni_context(project, limit)`: Active context & recent sessions in < 100 tokens.
-- `cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files)`: Persist session summary.
-- `cogni_search(query, project, category, limit)`: Lightweight discovery search.
+- `cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files, instructions, topic_key, project, tags, global)`: Persist session summary.
+- `cogni_search(query, project, category, all_projects, limit)`: Lightweight discovery search.
 - `cogni_get(id, topic_key, project)`: Full content hydration (Phase 2).
 - `cogni_save(title, summary, what, why, where, learned, category, tags, topic_key, project, global)`: Structured save/upsert.
 - `cogni_update(id, summary, title, category, tags, topic_key)`: Direct update by ID.
 - `cogni_stats()`: Memory usage, health, and token metrics.
 
-### CLI Commands:
+### 2. Native MCP Resources:
+- `cogni://context/recent`: Read active context and recent memory signatures directly as JSON.
+- `cogni://session/latest`: Read the latest session milestone and next steps directly as JSON.
+- `cogni://memory/{id}`: Template to read any memory signature by numeric ID.
+- `cogni://topic/{topic_key}`: Template to read any memory signature by deterministic topic key.
+
+### 3. Native MCP Prompts:
+- `cogni_preflight_check(task, project)`: Guided prompt template for preflight search before changes.
+- `cogni_session_summary(goal, accomplished, discoveries, next_steps)`: Guided prompt template to persist session state.
+
+### 4. CLI Fallback Commands:
 ```bash
 # 1. Quick active context bootstrapping
 cogni context
