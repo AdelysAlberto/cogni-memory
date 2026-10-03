@@ -132,8 +132,8 @@ Cogni detecta y configura automaticamente los principales entornos y arneses de 
 | **Pi Coding Agent (`pi.dev`)** | Si | Si | Si | Si | `~/.pi/agent/` |
 | **Claude Code CLI** | Si | Si | Si | Si | `~/.claude/` / `~/.claude.json` |
 | **Claude Desktop** | Si | Si | Si | No | `~/Library/Application Support/Claude/` |
-| **Cursor IDE** | Si | No (vía MCP + Rules) | Si | No (vía rules) | `~/.cursor/` |
-| **Gemini Antigravity** | Si | No (vía MCP + Rules) | Si | No (vía rules) | `~/.gemini/config/` |
+| **Cursor IDE** | Si | Si | Si | No (vía rules) | `~/.cursor/` |
+| **Gemini Antigravity** | Si | Si | Si | No (vía rules) | `~/.gemini/config/` |
 | **OpenCode** | Si | Si | Si | Si | `~/.config/opencode/` |
 | **GitHub Copilot (VS Code)** | No (vía CLI) | Si | Si | Instrucciones User | `~/.config/Code/User/prompts/` |
 | **Hermes CLI** | Si | Si | Si | Si | `~/.hermes/` |
