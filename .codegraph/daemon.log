@@ -1,0 +1,38 @@
+[2026-09-22T12:02:25.230Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 54223, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:02:25.303Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:02:25.306Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:04:34.010Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).
+[2026-09-22T12:04:39.780Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 55115, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:04:39.859Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:04:39.863Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:17:36.406Z] [CodeGraph MCP] Auto-synced 1 file(s) in 79ms
+[2026-09-22T12:17:46.562Z] [CodeGraph MCP] Auto-synced 1 file(s) in 8ms
+[2026-09-22T12:19:07.070Z] [CodeGraph MCP] Auto-synced 1 file(s) in 9ms
+[2026-09-22T12:19:14.795Z] [CodeGraph MCP] Auto-synced 1 file(s) in 4ms
+[2026-09-22T12:22:06.241Z] [CodeGraph MCP] Auto-synced 1 file(s) in 6ms
+[2026-09-22T12:27:17.815Z] [CodeGraph MCP] Auto-synced 1 file(s) in 5ms
+[2026-09-22T12:27:21.814Z] [CodeGraph MCP] Auto-synced 1 file(s) in 9ms
+[2026-09-22T12:27:26.613Z] [CodeGraph MCP] Auto-synced 1 file(s) in 3ms
+[2026-09-22T12:28:58.680Z] [CodeGraph MCP] Auto-synced 1 file(s) in 7ms
+[2026-09-22T12:29:05.739Z] [CodeGraph MCP] Auto-synced 1 file(s) in 8ms
+[2026-09-22T12:31:48.012Z] [CodeGraph MCP] Auto-synced 1 file(s) in 7ms
+[2026-09-22T12:31:52.566Z] [CodeGraph MCP] Auto-synced 1 file(s) in 2ms
+[2026-09-22T12:32:11.117Z] [CodeGraph MCP] Auto-synced 1 file(s) in 5ms
+[2026-09-22T12:33:20.075Z] [CodeGraph MCP] Auto-synced 1 file(s) in 8ms
+[2026-09-22T12:38:13.278Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).
+[2026-09-22T12:38:20.563Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 65177, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:38:20.646Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:38:20.650Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:38:21.524Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).
+[2026-09-22T12:38:43.716Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 65349, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:38:43.786Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:38:43.790Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:38:47.996Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).
+[2026-09-22T12:38:59.118Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 65494, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:38:59.195Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:38:59.198Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:39:00.774Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).
+[2026-09-22T12:39:41.152Z] [CodeGraph daemon] Listening on /home/adalbeca/Dev/cogni-memory/.codegraph/daemon.sock (pid 65628, v1.6.0). Idle timeout 300000ms.
+[2026-09-22T12:39:41.249Z] [CodeGraph MCP] File watcher active — graph will auto-sync on changes
+[2026-09-22T12:39:41.252Z] [CodeGraph MCP] Query pool: up to 11 worker thread(s) for concurrent reads.
+[2026-09-22T12:49:05.280Z] [CodeGraph daemon] Shutting down (SIGTERM; clients=1).

@@ -1,0 +1,191 @@
+From 7164b881124b7df61c3f87c75720be9d6f72b6eb Mon Sep 17 00:00:00 2001
+From: Clicker <adalbeca@gmail.com>
+Date: Mon, 5 Oct 2026 14:41:38 +0200
+Subject: [PATCH] fix(mcp): accept refactor memory category
+
+---
+ README.md                                   |  2 ++
+ artifacts/walkthroughs/REFACTOR_CATEGORY.md | 23 ++++++++++++++++
+ internal/mcp/categories_test.go             | 30 +++++++++++++++++++++
+ internal/mcp/server.go                      | 10 ++++---
+ internal/mcp/server_test.go                 | 18 ++++++++-----
+ 5 files changed, 74 insertions(+), 9 deletions(-)
+ create mode 100644 artifacts/walkthroughs/REFACTOR_CATEGORY.md
+ create mode 100644 internal/mcp/categories_test.go
+
+diff --git a/README.md b/README.md
+index acd4c9d..bf04ad4 100644
+--- a/README.md
++++ b/README.md
+@@ -195,6 +195,8 @@ Cogni implementa la especificacion completa de Model Context Protocol (MCP 2024-
+ * **`cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files)`**: Persistencia de progreso al finalizar sesion o tras compactacion.
+ * **`cogni_stats()`**: Auditoria de salud de memoria y tokens reales ahorrados.
+ 
++Las categorias publicadas por `cogni_save` y `cogni_search` son `bugfix`, `architecture`, `refactor`, `decision`, `discovery`, `config`, `pattern`, `preference` y `general`. Usen `refactor` para reorganizaciones de codigo que mantienen el comportamiento; `config` para cambios de configuracion y `architecture` para decisiones estructurales.
++
+ ### 2. Recursos Pasivos (Resources)
+ Permiten a los clientes MCP inyectar contexto directamente al prompt de usuario sin consumir llamadas activas de herramientas:
+ * **`cogni://context/recent`**: Contexto activo reciente y firmas arquitectonicas del workspace en formato JSON.
+diff --git a/artifacts/walkthroughs/REFACTOR_CATEGORY.md b/artifacts/walkthroughs/REFACTOR_CATEGORY.md
+new file mode 100644
+index 0000000..250318d
+--- /dev/null
++++ b/artifacts/walkthroughs/REFACTOR_CATEGORY.md
+@@ -0,0 +1,23 @@
++# Categoria refactor en MCP
++
++## Cambio
++
++- `cogni_save` y `cogni_search` anuncian `refactor` en un catalogo compartido.
++- Se conservan las ocho categorias existentes y no se modifica el esquema SQLite.
++- El README distingue reorganizacion de codigo, configuracion y arquitectura.
++
++## Verificacion
++
++- Prueba de contrato de ambos enums, incluidas las categorias previas.
++- Flujo real de guardado, busqueda por categoria, recuperacion y upsert con `refactor`.
++- `go vet ./...`, `go test ./...`, `go build ./...` y `git diff --check` exitosos.
++
++## Revision
++
++Tio Bob: `APPROVED_WITH_OBSERVATIONS`, sin bloqueos ni regresiones de seguridad detectadas.
++Se atendio la observacion de comprobar error y categoria tras recuperar el upsert.
++
++## Distribucion
++
++Version patch prevista: `v2.3.6`. Los clientes deben usar el binario actualizado y
++reiniciar o reconectar su servidor MCP para cargar el nuevo esquema.
+\ No newline at end of file
+diff --git a/internal/mcp/categories_test.go b/internal/mcp/categories_test.go
+new file mode 100644
+index 0000000..aba3eeb
+--- /dev/null
++++ b/internal/mcp/categories_test.go
+@@ -0,0 +1,30 @@
++package mcp
++
++import (
++	"slices"
++	"testing"
++)
++
++func TestMCPMemoryCategorySchemas(t *testing.T) {
++	expected := []string{"bugfix", "architecture", "refactor", "decision", "discovery", "config", "pattern", "preference", "general"}
++	server := NewServer("test-categories")
++	checked := 0
++	for _, tool := range server.getToolsList() {
++		if tool.Name != "cogni_save" && tool.Name != "cogni_search" {
++			continue
++		}
++		checked++
++		t.Run(tool.Name, func(t *testing.T) {
++			category, exists := tool.InputSchema.Properties["category"]
++			if !exists {
++				t.Fatal("Missing category property")
++			}
++			if !slices.Equal(category.Enum, expected) {
++				t.Errorf("Expected category enum %v, got %v", expected, category.Enum)
++			}
++		})
++	}
++	if checked != 2 {
++		t.Fatalf("Expected save and search category schemas, checked %d", checked)
++	}
++}
+diff --git a/internal/mcp/server.go b/internal/mcp/server.go
+index 8715f50..bdd7b7a 100644
+--- a/internal/mcp/server.go
++++ b/internal/mcp/server.go
+@@ -304,6 +304,10 @@ func (s *Server) sendError(w io.Writer, id any, code int, message string) {
+ 	_, _ = fmt.Fprintf(w, "%s\n", string(data))
+ }
+ 
++func memoryCategories() []string {
++	return []string{"bugfix", "architecture", "refactor", "decision", "discovery", "config", "pattern", "preference", "general"}
++}
++
+ func (s *Server) getToolsList() []Tool {
+ 	additionalPropsFalse := false
+ 
+@@ -325,8 +329,8 @@ func (s *Server) getToolsList() []Tool {
+ 					},
+ 					"category": {
+ 						Type:        "string",
+-						Description: "Filter by memory category (bugfix, architecture, decision, discovery, config, pattern, preference, general).",
+-						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
++						Description: "Filter by memory category (" + strings.Join(memoryCategories(), ", ") + ").",
++						Enum:        memoryCategories(),
+ 					},
+ 					"all_projects": {
+ 						Type:        "boolean",
+@@ -400,7 +404,7 @@ func (s *Server) getToolsList() []Tool {
+ 					"category": {
+ 						Type:        "string",
+ 						Description: "Memory classification category.",
+-						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
++						Enum:        memoryCategories(),
+ 					},
+ 					"tags": {
+ 						Description: "Tags in 3 tiers. Can be a comma-separated string (e.g. 'auth,jwt,tokens') or an array of tag strings.",
+diff --git a/internal/mcp/server_test.go b/internal/mcp/server_test.go
+index 5264009..82b699f 100644
+--- a/internal/mcp/server_test.go
++++ b/internal/mcp/server_test.go
+@@ -28,7 +28,7 @@ func TestMCPServerToolsAndResources(t *testing.T) {
+ 	saveStructuredArgs := map[string]any{
+ 		"title":     "JWT Refresh Flow",
+ 		"topic_key": "arch/auth/jwt",
+-		"category":  "architecture",
++		"category":  "refactor",
+ 		"tags":      []string{"auth", "jwt", "security"},
+ 		"what":      "Implemented refresh token rotation",
+ 		"why":       "Security audit",
+@@ -47,8 +47,9 @@ func TestMCPServerToolsAndResources(t *testing.T) {
+ 
+ 	// 2. Test cogni_search (2-step protocol, step 1)
+ 	searchArgs := map[string]any{
+-		"query":   "refresh",
+-		"project": "test-project",
++		"query":    "refresh",
++		"project":  "test-project",
++		"category": "refactor",
+ 	}
+ 	searchBytes, _ := json.Marshal(searchArgs)
+ 	searchRes, isErr := server.executeTool("cogni_search", searchBytes)
+@@ -72,12 +73,15 @@ func TestMCPServerToolsAndResources(t *testing.T) {
+ 	if !strings.Contains(getRes, "What: Implemented refresh token rotation") {
+ 		t.Errorf("Expected get result to contain full structured summary, got: %s", getRes)
+ 	}
++	if !strings.Contains(getRes, "Category: refactor") {
++		t.Errorf("Expected persisted refactor category, got: %s", getRes)
++	}
+ 
+ 	// 4. Test cogni_save upsert behavior with same topic_key
+ 	updateSaveArgs := map[string]any{
+ 		"title":     "JWT Refresh Flow V2",
+ 		"topic_key": "arch/auth/jwt",
+-		"category":  "architecture",
++		"category":  "refactor",
+ 		"tags":      "auth,jwt,security,v2",
+ 		"summary":   "What: Updated refresh token rotation with Redis blacklist | Why: Scale | Where: auth/jwt.go | Learned: Redis TTL auto cleans",
+ 		"project":   "test-project",
+@@ -89,7 +93,10 @@ func TestMCPServerToolsAndResources(t *testing.T) {
+ 	}
+ 
+ 	// Verify get returns updated data
+-	getRes2, _ := server.executeTool("cogni_get", getBytes)
++	getRes2, isErr := server.executeTool("cogni_get", getBytes)
++	if isErr || !strings.Contains(getRes2, "Category: refactor") {
++		t.Fatalf("Expected persisted refactor category after upsert, got: %s", getRes2)
++	}
+ 	if !strings.Contains(getRes2, "JWT Refresh Flow V2") {
+ 		t.Errorf("Expected upserted title in get result, got: %s", getRes2)
+ 	}
+@@ -238,4 +245,3 @@ func TestMCPServerJSONRPCProtocol(t *testing.T) {
+ 		t.Errorf("Expected -32601 Method Not Found error, got: %s", buf.String())
+ 	}
+ }
+-
+-- 
+2.43.0
+
