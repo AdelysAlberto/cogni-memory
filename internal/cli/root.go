@@ -4,25 +4,21 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/AdelysAlberto/cogni/internal/core"
-	"github.com/AdelysAlberto/cogni/internal/mcp"
 	"github.com/AdelysAlberto/cogni/internal/server"
 	"github.com/AdelysAlberto/cogni/internal/storage"
 )
 
-var Version = "dev"
+const Version = "2.0.1 (Go Core)"
 
 func Execute(args []string) int {
 	if len(args) < 1 {
@@ -38,21 +34,8 @@ func Execute(args []string) int {
 		return handleInit(cmdArgs)
 	case "save":
 		return handleSave(cmdArgs)
-	case "context":
-		return handleContext(cmdArgs)
-	case "session-summary", "compact":
-		return handleSessionSummary(cmdArgs)
 	case "search":
 		return handleSearch(cmdArgs)
-	case "get":
-		return handleGet(cmdArgs)
-	case "mcp":
-		server := mcp.NewServer(Version)
-		if err := server.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error ejecutando servidor MCP: %v\n", err)
-			return 1
-		}
-		return 0
 	case "update":
 		// If called without memory flags or with --check, route to upgrade
 		if len(cmdArgs) == 0 || (len(cmdArgs) == 1 && (cmdArgs[0] == "--check" || cmdArgs[0] == "-c")) {
@@ -73,15 +56,13 @@ func Execute(args []string) int {
 		return handlePromote(cmdArgs)
 	case "ui":
 		return handleUI(cmdArgs)
-	case "tray", "bar":
-		return handleTray(cmdArgs)
 	case "skill", "skills":
-		promptAndInstallSkills("", len(cmdArgs) > 0 && cmdArgs[0] == "--all")
+		promptAndInstallSkills(len(cmdArgs) > 0 && cmdArgs[0] == "--all")
 		return 0
 	case "uninstall":
 		return handleUninstall(cmdArgs)
 	case "version", "--version", "-v":
-		fmt.Printf("🧠 Cogni %s\n", "v"+strings.TrimPrefix(Version, "v"))
+		fmt.Printf("🧠 Cogni v%s\n", Version)
 		return 0
 	case "help", "--help", "-h":
 		printUsage()
@@ -101,42 +82,33 @@ Uso:
   cogni <comando> [argumentos...]
 
 Comandos Principales:
-  init             Inicializa Cogni globalmente (~/.cogni/) e instala skills de IA
-  save             Guarda o actualiza (upsert) una firma de memoria sintética
-  context          Muestra el contexto activo reciente del proyecto (alta señal, bajo token)
-  session-summary  Guarda un resumen estructurado al cerrar sesión o tras compactar
-  search           Busca firmas de memoria con FTS5 (previews compactas para ahorrar tokens)
-  get              Recupera una memoria completa por ID o por TopicKey determinístico
-  mcp              Inicia el servidor nativo MCP (Model Context Protocol) por stdio
-  update           Actualiza una memoria existente por su ID
-  promote          Promueve una memoria de local a global (o viceversa)
-  remove           Elimina una memoria por su ID
-  share            Exporta o comparte firmas de memoria (Markdown / JSON)
-  list             Lista las memorias registradas
-  stats            Muestra métricas y tokens ahorrados
-  ui               Abre el dashboard gráfico interactivo en el navegador
-  bar, tray        Abre la app residente en el Top Bar (macOS) o Bandeja del Sistema
-  skill            Instala o actualiza el Skill en tus arneses de IA
-  uninstall        Desinstala Cogni, elimina el binario y limpia las skills
-  version          Muestra la versión de Cogni
-
-Flags de init:
-  --project   Inicializa solo el almacén local (.cogni/) en el proyecto actual, sin instalar skills
-  --all       Instala las skills en todos los arneses de IA sin preguntar
-  --no-skills Omitir instalación de skills de IA (solo init global)
+  init        Inicializa el directorio local .cogni/ en el proyecto actual
+  save        Guarda una firma de memoria sintética
+  search      Busca firmas de memoria con FTS5 (local y global federado)
+  update      Actualiza una memoria existente por su ID
+  promote     Promueve una memoria de local a global (o viceversa)
+  remove      Elimina una memoria por su ID
+  share       Exporta o comparte firmas de memoria (Markdown / JSON)
+  list        Lista las memorias registradas
+  stats       Muestra métricas y tokens ahorrados
+  ui          Abre el dashboard gráfico interactivo en el navegador
+  skill       Instala o actualiza el Skill en tus arneses de IA
+  uninstall   Desinstala Cogni, elimina el binario y limpia las skills
+  version     Muestra la versión de Cogni
 
 Flags Globales:
-  --db        Ruta personalizada al archivo SQLite
-  --json      Imprime la salida en formato JSON puro
+  --global  Fuerza el uso de la base de datos global (~/.cogni/memory.db)
+  --db      Ruta personalizada al archivo SQLite
+  --json    Imprime la salida en formato JSON puro
 
 Ejemplos:
-  cogni init                   # Instala cogni global + configura skills de IA
-  cogni save --topic-key "arch/auth/jwt" --title "Auth JWT" --summary "What: ... | Why: ... | Where: ... | Learned: ..." --category architecture --tags "auth,jwt"
-  cogni search --query "jwt"   # Búsqueda compacta (IDs y previews)
-  cogni get --id 6             # Recuperación completa por ID
-  cogni get arch/auth/jwt      # Recuperación completa por TopicKey
-  cogni mcp                    # Inicia servidor MCP para agentes
-  cogni ui                     # Abre dashboard web
+  cogni init
+  cogni save --title "Auth JWT" --summary "Firma sintética..." --category auth --tags "jwt,tokens"
+  cogni search --query "jwt"
+  cogni update --id 6 --summary "Nueva firma..."
+  cogni remove --id 6
+  cogni share --format markdown > memories.md
+  cogni ui
 `
 	fmt.Print(usage)
 }
@@ -146,40 +118,14 @@ func getStorage(customPath string, forceGlobal bool) (*storage.Storage, error) {
 	return storage.New(dbPath)
 }
 
-func prettyPath(p string) string {
-	home, err := os.UserHomeDir()
-	if err == nil && strings.HasPrefix(p, home) {
-		return "~" + p[len(home):]
-	}
-	return p
-}
-
 func handleInit(args []string) int {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	project := fs.Bool("project", false, "Inicializa el almacén local (.cogni/) en el proyecto actual")
+	forceGlobal := fs.Bool("global", false, "Inicializa la base de datos global en ~/.cogni")
 	noSkills := fs.Bool("no-skills", false, "Omitir instalación de skills de IA")
 	allSkills := fs.Bool("all", false, "Instalar automáticamente en todos los arneses de IA")
-	harnessFlag := fs.String("harness", "", "Especifica el arnés de IA a instalar (antigravity, cursor, claude, pi, opencode, local, copilot, hermes, codex, all, none)")
-	// --global mantenido como alias de retrocompatibilidad
-	_ = fs.Bool("global", false, "")
 	_ = fs.Parse(args)
 
-	if *project {
-		localDir := filepath.Join(".", ".cogni")
-		if err := os.MkdirAll(localDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creando directorio .cogni: %v\n", err)
-			return 1
-		}
-		dbPath := filepath.Join(localDir, "memory.db")
-		s, err := storage.New(dbPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error inicializando base de datos local: %v\n", err)
-			return 1
-		}
-		s.Close()
-		fmt.Printf("✅ Cogni local inicializado en: %s\n", dbPath)
-		fmt.Printf("💡 Proyecto detectado: %s\n", core.DetectProjectName())
-	} else {
+	if *forceGlobal {
 		dir := core.GetGlobalCogniDir()
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			fmt.Fprintf(os.Stderr, "Error creando directorio global: %v\n", err)
@@ -192,18 +138,34 @@ func handleInit(args []string) int {
 			return 1
 		}
 		s.Close()
-
-		if !*noSkills {
-			promptAndInstallSkills(*harnessFlag, *allSkills)
-		} else {
-			fmt.Printf("✅ Cogni global inicializado en: %s\n", prettyPath(dbPath))
+		fmt.Printf("✅ Cogni global inicializado en: %s\n", dbPath)
+	} else {
+		localDir := filepath.Join(".", ".cogni")
+		if err := os.MkdirAll(localDir, 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "Error creando directorio .cogni: %v\n", err)
+			return 1
 		}
+
+		dbPath := filepath.Join(localDir, "memory.db")
+		s, err := storage.New(dbPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error inicializando base de datos local: %v\n", err)
+			return 1
+		}
+		s.Close()
+
+		fmt.Printf("✅ Cogni local inicializado en: %s\n", dbPath)
+		fmt.Printf("💡 Proyecto detectado: %s\n", core.DetectProjectName())
+	}
+
+	if !*noSkills {
+		promptAndInstallSkills(*allSkills)
 	}
 
 	return 0
 }
 
-func promptAndInstallSkills(harnessFlag string, autoAll bool) {
+func promptAndInstallSkills(autoAll bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return
@@ -211,170 +173,95 @@ func promptAndInstallSkills(harnessFlag string, autoAll bool) {
 
 	harnesses := core.GetHarnessSkillPaths(home)
 
-	// Intentar cargar configuración guardada previa al actualizar
-	cfg, _ := core.LoadConfig(home)
-	if harnessFlag == "" && autoAll && cfg != nil && len(cfg.SelectedHarnesses) > 0 {
-		for _, h := range cfg.SelectedHarnesses {
-			if paths, ok := harnesses[h]; ok {
-				for _, p := range paths {
-					_ = core.InstallSkill(p)
-				}
-			}
-		}
-
-		_ = core.InstallRules(home, cfg.SelectedHarnesses)
-		mcpResults := core.ConfigureHarnessMCP(home, cfg.SelectedHarnesses)
-		injectedDirectives := core.InjectAgentDirectives(home, cfg.SelectedHarnesses)
-
-		fmt.Println("🔄 Cogni Upgrade: Arneses de IA actualizados:")
-		fmt.Printf("  ✔ Arneses activos:    %s\n", strings.Join(cfg.SelectedHarnesses, ", "))
-		if len(mcpResults) > 0 {
-			fmt.Printf("  ✔ Servidores MCP:     Configurados en %d destinos\n", len(mcpResults))
-		}
-		if len(injectedDirectives) > 0 {
-			fmt.Printf("  ✔ Directivas AGENTS:  Preservadas e inyectadas en %d destinos\n", len(injectedDirectives))
-		}
-		return
-	}
-
-	availableHarnesses := []SelectItem{
-		{Key: "all", Title: "TODOS los entornos (Recomendado)", Description: "Configura automáticamente todos los arneses detectados"},
-		{Key: "pi", Title: "Pi Coding Agent", Description: "~/.pi/agent/ (MCP, skills, rules, AGENTS.md)"},
-		{Key: "antigravity", Title: "Gemini Antigravity", Description: "~/.gemini/config/ (MCP + Always-On Rules)"},
-		{Key: "cursor", Title: "Cursor IDE", Description: "~/.cursor/ (MCP + Always-On Rules)"},
-		{Key: "claude", Title: "Claude Code / Desktop", Description: "~/.claude/ & claude_desktop_config.json"},
-		{Key: "opencode", Title: "OpenCode", Description: "~/.config/opencode/ (MCP v2 + Skills + Rules)"},
-		{Key: "local", Title: "Agentes Estándar", Description: "~/.agents/ (Skills + Rules + Workspace)"},
-		{Key: "copilot", Title: "GitHub Copilot", Description: "VS Code Copilot User Prompts & Instructions"},
-		{Key: "hermes", Title: "Hermes CLI", Description: "~/.hermes/ (MCP + Skills + Rules)"},
-		{Key: "codex", Title: "OpenAI Codex CLI", Description: "~/.codex/config.toml (TOML MCP + Skills)"},
-		{Key: "none", Title: "Omitir instalación de skills", Description: "Solo inicializar base de datos local/global"},
-	}
-
-	selectedKey := ""
-	if harnessFlag != "" {
-		hLower := strings.ToLower(harnessFlag)
-		switch hLower {
-		case "antigravity", "1":
-			selectedKey = "antigravity"
-		case "cursor", "2":
-			selectedKey = "cursor"
-		case "claude", "3":
-			selectedKey = "claude"
-		case "pi", "4":
-			selectedKey = "pi"
-		case "opencode", "5":
-			selectedKey = "opencode"
-		case "local", "agents", "6":
-			selectedKey = "local"
-		case "copilot", "7":
-			selectedKey = "copilot"
-		case "hermes", "8":
-			selectedKey = "hermes"
-		case "codex", "9":
-			selectedKey = "codex"
-		case "all", "10":
-			selectedKey = "all"
-		case "none", "11":
-			selectedKey = "none"
-		default:
-			selectedKey = hLower
-		}
-	} else if autoAll {
-		selectedKey = "all"
+	choice := ""
+	if autoAll {
+		choice = "8"
 	} else {
-		selectedItem, err := InteractiveSelect("🤖 Selecciona el entorno o Harness de IA que utilizas:", availableHarnesses, 0, 4)
-		if err != nil {
-			fmt.Println("⏭️ Instalación de Skill cancelada.")
-			return
+		fmt.Println("\n🤖 Selecciona el entorno o Harness de IA que utilizas:")
+		fmt.Println("1) Proyecto actual (.agents/skills/)")
+		fmt.Println("2) Gemini Antigravity (~/.gemini/config/skills/)")
+		fmt.Println("3) Cursor IDE (~/.cursor/skills/)")
+		fmt.Println("4) Claude Code / Desktop (~/.claude/skills/)")
+		fmt.Println("5) OpenCode (~/.config/opencode/skills/ & ~/.agents/skills/)")
+		fmt.Println("6) GitHub Copilot (~/.agents/skills/ & ~/.copilot/skills/)")
+		fmt.Println("7) Hermes CLI (~/.hermes/skills/)")
+		fmt.Println("8) Instalar en TODOS los entornos detectados (Recomendado)")
+		fmt.Println("9) Omitir instalación de Skill")
+		fmt.Print("\nIngresa tu opción (1-9) [por defecto: 8]: ")
+
+		var input string
+		_, _ = fmt.Scanln(&input)
+		choice = strings.TrimSpace(input)
+		if choice == "" {
+			choice = "8"
 		}
-		selectedKey = selectedItem.Key
 	}
 
-	var selectedHarnesses []string
-	var harnessLabel string
-
-	switch selectedKey {
-	case "antigravity":
-		selectedHarnesses = []string{"antigravity"}
-		harnessLabel = "Gemini Antigravity"
-	case "cursor":
-		selectedHarnesses = []string{"cursor"}
-		harnessLabel = "Cursor IDE"
-	case "claude":
-		selectedHarnesses = []string{"claude"}
-		harnessLabel = "Claude Code / Desktop"
-	case "pi":
-		selectedHarnesses = []string{"pi"}
-		harnessLabel = "Pi Coding Agent"
-	case "opencode":
-		selectedHarnesses = []string{"opencode"}
-		harnessLabel = "OpenCode"
-	case "local":
-		selectedHarnesses = []string{"local"}
-		harnessLabel = "Agentes Estándar (~/.agents/)"
-	case "copilot":
-		selectedHarnesses = []string{"copilot"}
-		harnessLabel = "GitHub Copilot"
-	case "hermes":
-		selectedHarnesses = []string{"hermes"}
-		harnessLabel = "Hermes CLI"
-	case "codex":
-		selectedHarnesses = []string{"codex"}
-		harnessLabel = "OpenAI Codex CLI"
-	case "all":
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "pi", "opencode", "copilot", "hermes", "codex"}
-		harnessLabel = "Todos los arneses detectados"
-	case "none":
-		fmt.Println("⏭️ Instalación de Skill omitida.")
-		return
-	default:
-		selectedHarnesses = []string{"local", "antigravity", "cursor", "claude", "pi", "opencode", "copilot", "hermes", "codex"}
-		harnessLabel = "Todos los arneses detectados"
-	}
-
-	for _, name := range selectedHarnesses {
-		if paths, ok := harnesses[name]; ok {
+	switch choice {
+	case "1":
+		for _, p := range harnesses["local"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en: %s\n", p)
+		}
+	case "2":
+		for _, p := range harnesses["antigravity"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Antigravity: %s\n", p)
+		}
+	case "3":
+		for _, p := range harnesses["cursor"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Cursor: %s\n", p)
+		}
+	case "4":
+		for _, p := range harnesses["claude"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Claude: %s\n", p)
+		}
+	case "5":
+		for _, p := range harnesses["opencode"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en OpenCode: %s\n", p)
+		}
+	case "6":
+		for _, p := range harnesses["copilot"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Copilot: %s\n", p)
+		}
+	case "7":
+		for _, p := range harnesses["hermes"] {
+			_ = core.InstallSkill(p)
+			fmt.Printf("  -> Skill instalada en Hermes: %s\n", p)
+		}
+	case "8":
+		fmt.Println("🚀 Registrando Skill de Cogni en todos los arneses de IA...")
+		for name, paths := range harnesses {
 			for _, p := range paths {
 				_ = core.InstallSkill(p)
 			}
+			fmt.Printf("  -> Configurado para: %s\n", name)
+		}
+	case "9":
+		fmt.Println("⏭️ Instalación de Skill omitida.")
+		return
+	default:
+		fmt.Println("🚀 Opción por defecto: Registrando en todos los arneses...")
+		for name, paths := range harnesses {
+			for _, p := range paths {
+				_ = core.InstallSkill(p)
+			}
+			fmt.Printf("  -> Configurado para: %s\n", name)
 		}
 	}
 
-	_ = core.SaveConfig(home, &core.Config{SelectedHarnesses: selectedHarnesses})
-	_ = core.InstallRules(home, selectedHarnesses)
-	mcpResults := core.ConfigureHarnessMCP(home, selectedHarnesses)
-	injectedDirectives := core.InjectAgentDirectives(home, selectedHarnesses)
-
-	dbPath := prettyPath(filepath.Join(core.GetGlobalCogniDir(), "memory.db"))
-
-	fmt.Println("\n⚙️  Configuración completada:")
-	fmt.Printf("  ✔ Almacenamiento:   %s\n", dbPath)
-	fmt.Printf("  ✔ Skill de IA:      %s\n", harnessLabel)
-	fmt.Println("  ✔ Reglas Invariants: Inyectadas")
-	if len(mcpResults) > 0 {
-		fmt.Printf("  ✔ Servidores MCP:   Configurados en %d destinos\n", len(mcpResults))
-	}
-	if len(injectedDirectives) > 0 {
-		fmt.Printf("  ✔ Directivas AGENTS: Preservadas e inyectadas en %d destinos\n", len(injectedDirectives))
-	}
-
-	fmt.Println("\n💡 Uso rápido:")
-	fmt.Println("   cogni search \"<query>\"   Busca memorias sintéticas (FTS5 BM25)")
-	fmt.Println("   cogni save --title \"..\"  Guarda una firma de conocimiento")
-	fmt.Println("   cogni ui                 Abre el dashboard gráfico en el navegador")
+	fmt.Println("✨ Skills de Cogni configuradas y listas para usar con tus Agentes de IA.")
 }
 
 func handleSave(args []string) int {
 	fs := flag.NewFlagSet("save", flag.ExitOnError)
 	project := fs.String("project", "", "Nombre del proyecto")
 	title := fs.String("title", "", "Título o hito de la memoria")
-	topicKey := fs.String("topic-key", "", "Clave temática determinística para posibilitar upserts (ej: 'sdd/auth/spec')")
 	summary := fs.String("summary", "", "Resumen sintético de la memoria")
-	what := fs.String("what", "", "Qué se hizo (una oración descriptiva)")
-	why := fs.String("why", "", "Motivo o causa raíz")
-	where := fs.String("where", "", "Archivos o rutas afectadas")
-	learned := fs.String("learned", "", "Gotchas o aprendizajes")
 	category := fs.String("category", "general", "Categoría")
 	tags := fs.String("tags", "", "Tags separados por coma")
 	global := fs.Bool("global", false, "Guardar en la base de datos global")
@@ -383,30 +270,14 @@ func handleSave(args []string) int {
 
 	_ = fs.Parse(args)
 
-	finalSummary := *summary
-	if finalSummary == "" && (*what != "" || *why != "" || *where != "" || *learned != "") {
-		finalSummary = core.BuildSummarySignature(*what, *why, *where, *learned)
-	}
-
-	if *title == "" || finalSummary == "" {
-		fmt.Fprintln(os.Stderr, "Error: --title y (--summary o --what/--why/--where/--learned) son obligatorios.")
+	if *title == "" || *summary == "" {
+		fmt.Fprintln(os.Stderr, "Error: --title y --summary son obligatorios.")
 		return 1
 	}
 
 	projectName := *project
 	if projectName == "" {
 		projectName = core.DetectProjectName()
-	}
-
-	if !*global && *dbPath == "" && core.FindLocalCogniDir() == "" {
-		fmt.Println("⚠️  No se encontró .cogni/ local en este proyecto.")
-		fmt.Println("   Ejecutaré 'cogni init' para inicializar el almacén local del proyecto.")
-		localDir := filepath.Join(".", ".cogni")
-		if err := os.MkdirAll(localDir, 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "Error creando directorio .cogni: %v\n", err)
-			return 1
-		}
-		fmt.Printf("✅ Almacén local inicializado en: %s\n", localDir)
 	}
 
 	formattedTags := core.FormatTags(*tags, projectName)
@@ -422,8 +293,7 @@ func handleSave(args []string) int {
 		ProjectName:      projectName,
 		Category:         *category,
 		Title:            *title,
-		TopicKey:         *topicKey,
-		SummarySignature: finalSummary,
+		SummarySignature: *summary,
 		Tags:             formattedTags,
 	}
 
@@ -440,135 +310,9 @@ func handleSave(args []string) int {
 		fmt.Printf("ID: #%d\n", saved.ID)
 		fmt.Printf("Proyecto: [%s]\n", saved.ProjectName)
 		fmt.Printf("Título: %s\n", saved.Title)
-		if saved.TopicKey != "" {
-			fmt.Printf("Topic Key: %s\n", saved.TopicKey)
-		}
 		fmt.Printf("Categoría: %s\n", saved.Category)
 		fmt.Printf("Tags: %s\n", saved.Tags)
-		fmt.Printf("Resumen: %s\n", saved.SummarySignature)
 		fmt.Printf("Ubicación BD: %s\n", s.DBPath())
-	}
-
-	return 0
-}
-
-func handleContext(args []string) int {
-	fs := flag.NewFlagSet("context", flag.ExitOnError)
-	project := fs.String("project", "", "Filtrar por proyecto")
-	limit := fs.Int("limit", 5, "Límite de resultados")
-	globalOnly := fs.Bool("global", false, "Buscar solo en BD global")
-	asJSON := fs.Bool("json", false, "Salida en JSON")
-
-	_ = fs.Parse(args)
-
-	projectName := *project
-	if projectName == "" && !*globalOnly {
-		projectName = core.DetectProjectName()
-	}
-
-	localStorage, globalStorage := getStorages()
-	if localStorage != nil {
-		defer localStorage.Close()
-	}
-	if globalStorage != nil {
-		defer globalStorage.Close()
-	}
-
-	var memories []core.Memory
-	if localStorage != nil && !*globalOnly {
-		mems, _ := localStorage.GetRecentContext(projectName, *limit)
-		memories = append(memories, mems...)
-	}
-	if globalStorage != nil && len(memories) < *limit {
-		mems, _ := globalStorage.GetRecentContext(projectName, *limit-len(memories))
-		memories = append(memories, mems...)
-	}
-
-	if *asJSON {
-		_ = json.NewEncoder(os.Stdout).Encode(memories)
-		return 0
-	}
-
-	if len(memories) == 0 {
-		fmt.Printf("⚡ No hay contexto reciente registrado para '%s'.\n", projectName)
-		return 0
-	}
-
-	fmt.Printf("⚡ **Contexto Activo Reciente para [%s]** (%d memorias clave):\n\n", projectName, len(memories))
-	for _, m := range memories {
-		srcBadge := "LOCAL"
-		if m.Source == "global" {
-			srcBadge = "GLOBAL"
-		}
-		topicStr := ""
-		if m.TopicKey != "" {
-			topicStr = fmt.Sprintf(" | Key: %s", m.TopicKey)
-		}
-		fmt.Printf("▶ [#%d %s] [%s] %s%s\n  %s\n\n",
-			m.ID, srcBadge, m.Category, m.Title, topicStr, m.SummarySignature)
-	}
-
-	return 0
-}
-
-func handleSessionSummary(args []string) int {
-	fs := flag.NewFlagSet("session-summary", flag.ExitOnError)
-	goal := fs.String("goal", "", "Objetivo principal de la sesión")
-	accomplished := fs.String("accomplished", "", "Logros y tareas completadas")
-	discoveries := fs.String("discoveries", "", "Hallazgos y decisiones clave")
-	nextSteps := fs.String("next-steps", "", "Próximos pasos pendientes")
-	where := fs.String("where", "", "Archivos clave modificados")
-	instructions := fs.String("instructions", "", "Preferencias o restricciones aprendidas")
-	topicKey := fs.String("topic-key", "session/latest", "TopicKey determinístico")
-	project := fs.String("project", "", "Nombre del proyecto")
-	tags := fs.String("tags", "", "Tags adicionales")
-	global := fs.Bool("global", false, "Guardar en BD global")
-	dbPath := fs.String("db", "", "Ruta a BD personalizada")
-	asJSON := fs.Bool("json", false, "Salida en JSON")
-
-	_ = fs.Parse(args)
-
-	if *goal == "" || *accomplished == "" {
-		fmt.Fprintln(os.Stderr, "Error: --goal y --accomplished son obligatorios para el resumen de sesión.")
-		return 1
-	}
-
-	projectName := *project
-	if projectName == "" {
-		projectName = core.DetectProjectName()
-	}
-
-	s, err := getStorage(*dbPath, *global)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error conectando a BD: %v\n", err)
-		return 1
-	}
-	defer s.Close()
-
-	summaryObj := core.SessionSummary{
-		Goal:          *goal,
-		Accomplished:  *accomplished,
-		Discoveries:   *discoveries,
-		NextSteps:     *nextSteps,
-		RelevantFiles: *where,
-		Instructions:  *instructions,
-	}
-
-	saved, err := s.SaveSessionSummary(projectName, *topicKey, summaryObj, *tags)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error guardando resumen de sesión: %v\n", err)
-		return 1
-	}
-
-	if *asJSON {
-		_ = json.NewEncoder(os.Stdout).Encode(saved)
-	} else {
-		fmt.Println("📋 **Resumen de Sesión Guardado con Éxito**")
-		fmt.Printf("ID: #%d\n", saved.ID)
-		fmt.Printf("Proyecto: [%s]\n", saved.ProjectName)
-		fmt.Printf("Título: %s\n", saved.Title)
-		fmt.Printf("Topic Key: %s\n", saved.TopicKey)
-		fmt.Printf("Resumen: %s\n", saved.SummarySignature)
 	}
 
 	return 0
@@ -596,7 +340,6 @@ func handleSearch(args []string) int {
 	project := fs.String("project", "", "Filtrar por proyecto")
 	category := fs.String("category", "", "Filtrar por categoría")
 	limit := fs.Int("limit", 10, "Límite de resultados")
-	full := fs.Bool("full", false, "Mostrar la firma sintética completa en vez de preview compacto")
 	globalOnly := fs.Bool("global", false, "Buscar solo en la base de datos global")
 	localOnly := fs.Bool("local", false, "Buscar solo en la base de datos local")
 	dbPath := fs.String("db", "", "Ruta a la base de datos")
@@ -665,136 +408,16 @@ func handleSearch(args []string) int {
 		return 0
 	}
 
-	fmt.Printf("🔍 Se encontraron %d memoria(s) [Usa 'cogni get <id|topic-key>' para ver el contenido completo]:\n\n", len(results))
+	fmt.Printf("🔍 Se encontraron %d memoria(s):\n\n", len(results))
 	for _, m := range results {
 		srcBadge := "LOCAL"
 		if m.Source == "global" {
 			srcBadge = "GLOBAL"
 		}
-		topicStr := ""
-		if m.TopicKey != "" {
-			topicStr = fmt.Sprintf(" (Key: %s)", m.TopicKey)
-		}
-
-		if *full {
-			fmt.Printf("━━━ [%s #%d] [%s] %s%s ━━━\n", srcBadge, m.ID, m.ProjectName, m.Title, topicStr)
-			fmt.Printf("🏷️ Tags: %s | 📂 Categoría: %s\n", m.Tags, m.Category)
-			fmt.Printf("📝 %s\n\n", m.SummarySignature)
-		} else {
-			preview := m.SummarySignature
-			if idx := strings.Index(preview, "|"); idx != -1 {
-				preview = strings.TrimSpace(preview[:idx])
-			} else if len(preview) > 100 {
-				preview = preview[:97] + "..."
-			}
-			fmt.Printf("• [#%d %s] [%s] %s%s\n", m.ID, srcBadge, m.Category, m.Title, topicStr)
-			fmt.Printf("  Tags: %s | %s\n\n", m.Tags, preview)
-		}
+		fmt.Printf("━━━ [%s #%d] [%s] %s ━━━\n", srcBadge, m.ID, m.ProjectName, m.Title)
+		fmt.Printf("🏷️ Tags: %s | 📂 Categoría: %s\n", m.Tags, m.Category)
+		fmt.Printf("📝 %s\n\n", m.SummarySignature)
 	}
-
-	return 0
-}
-
-func handleGet(args []string) int {
-	fs := flag.NewFlagSet("get", flag.ExitOnError)
-	id := fs.Int64("id", 0, "ID de la memoria")
-	topicKey := fs.String("topic-key", "", "TopicKey determinístico")
-	project := fs.String("project", "", "Filtrar por proyecto")
-	globalOnly := fs.Bool("global", false, "Buscar solo en BD global")
-	localOnly := fs.Bool("local", false, "Buscar solo en BD local")
-	dbPath := fs.String("db", "", "Ruta a BD")
-	asJSON := fs.Bool("json", false, "Salida en JSON")
-
-	_ = fs.Parse(args)
-
-	// Check positional argument if neither --id nor --topic-key is provided
-	if *id <= 0 && *topicKey == "" && len(fs.Args()) > 0 {
-		posArg := fs.Args()[0]
-		if parsedID, err := strconv.ParseInt(posArg, 10, 64); err == nil && parsedID > 0 {
-			*id = parsedID
-		} else {
-			*topicKey = posArg
-		}
-	}
-
-	if *id <= 0 && *topicKey == "" {
-		fmt.Fprintln(os.Stderr, "Error: Especifica un ID o TopicKey (ej. 'cogni get 6' o 'cogni get arch/auth/jwt').")
-		return 1
-	}
-
-	projectName := *project
-	if projectName == "" && !*globalOnly {
-		projectName = core.DetectProjectName()
-	}
-
-	localStorage, globalStorage := getStorages()
-	if localStorage != nil {
-		defer localStorage.Close()
-	}
-	if globalStorage != nil {
-		defer globalStorage.Close()
-	}
-
-	var mem *core.Memory
-	var err error
-
-	if *dbPath != "" {
-		s, err := storage.New(*dbPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error conectando a BD: %v\n", err)
-			return 1
-		}
-		defer s.Close()
-		if *id > 0 {
-			mem, err = s.GetMemoryByID(*id)
-		} else {
-			mem, err = s.GetMemoryByTopicKey(projectName, *topicKey)
-		}
-	} else {
-		if *id > 0 {
-			if !*globalOnly && localStorage != nil {
-				mem, err = localStorage.GetMemoryByID(*id)
-			}
-			if mem == nil && !*localOnly && globalStorage != nil {
-				mem, err = globalStorage.GetMemoryByID(*id)
-			}
-		} else {
-			if !*globalOnly && localStorage != nil {
-				mem, err = localStorage.GetMemoryByTopicKey(projectName, *topicKey)
-			}
-			if mem == nil && !*localOnly && globalStorage != nil {
-				mem, err = globalStorage.GetMemoryByTopicKey(projectName, *topicKey)
-			}
-		}
-	}
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error recuperando memoria: %v\n", err)
-		return 1
-	}
-
-	if mem == nil {
-		fmt.Println("❌ Memoria no encontrada.")
-		return 1
-	}
-
-	if *asJSON {
-		_ = json.NewEncoder(os.Stdout).Encode(mem)
-		return 0
-	}
-
-	srcBadge := "LOCAL"
-	if mem.Source == "global" {
-		srcBadge = "GLOBAL"
-	}
-
-	fmt.Printf("━━━ [%s #%d] [%s] %s ━━━\n", srcBadge, mem.ID, mem.ProjectName, mem.Title)
-	if mem.TopicKey != "" {
-		fmt.Printf("🔑 Topic Key: %s\n", mem.TopicKey)
-	}
-	fmt.Printf("📂 Categoría: %s | 🏷️ Tags: %s\n", mem.Category, mem.Tags)
-	fmt.Printf("📅 Actualizado: %s\n\n", mem.UpdatedAt.Format("2006-01-02 15:04:05"))
-	fmt.Printf("📝 %s\n", mem.SummarySignature)
 
 	return 0
 }
@@ -854,7 +477,6 @@ func handleUpdate(args []string) int {
 	fs := flag.NewFlagSet("update", flag.ExitOnError)
 	id := fs.Int64("id", 0, "ID de la memoria a actualizar")
 	title := fs.String("title", "", "Nuevo título")
-	topicKey := fs.String("topic-key", "", "Nuevo TopicKey determinístico")
 	summary := fs.String("summary", "", "Nuevo resumen")
 	category := fs.String("category", "", "Nueva categoría")
 	tags := fs.String("tags", "", "Nuevos tags")
@@ -876,7 +498,7 @@ func handleUpdate(args []string) int {
 	}
 	defer s.Close()
 
-	updated, err := s.UpdateMemory(*id, *title, *summary, *category, *tags, *topicKey)
+	updated, err := s.UpdateMemory(*id, *title, *summary, *category, *tags)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error actualizando memoria: %v\n", err)
 		return 1
@@ -1135,13 +757,10 @@ func handleUninstall(args []string) int {
 		filepath.Join(home, ".gemini", "config", "skills", "agent-memory"),
 		filepath.Join(home, ".cursor", "skills", "cogni"),
 		filepath.Join(home, ".cursor", "skills", "agent-memory"),
-		filepath.Join(home, ".claude", "skills", "cogni"),
-		filepath.Join(home, ".claude", "skills", "agent-memory"),
 		filepath.Join(home, ".config", "opencode", "skills", "cogni"),
 		filepath.Join(home, ".agents", "skills", "cogni"),
 		filepath.Join(home, ".copilot", "skills", "cogni"),
 		filepath.Join(home, ".hermes", "skills", "cogni"),
-		filepath.Join(home, ".codex", "skills", "cogni"),
 	}
 
 	for _, p := range skillPaths {
@@ -1168,18 +787,6 @@ func handleUninstall(args []string) int {
 		}
 	}
 
-	// 2.2 Remove Codex MCP entry from ~/.codex/config.toml (preserving other settings)
-	codexMCPPaths := []string{
-		filepath.Join(home, ".codex", "config.toml"),
-	}
-	for _, p := range codexMCPPaths {
-		if _, err := os.Stat(p); err == nil {
-			if err := core.RemoveCodexMCPServer(p, "cogni"); err == nil {
-				fmt.Printf("  -> MCP Codex eliminado: %s\n", p)
-			}
-		}
-	}
-
 	// 3. Purge DB if requested or confirmed
 	if *purgeDB {
 		cogniDir := filepath.Join(home, ".cogni")
@@ -1194,98 +801,6 @@ func handleUninstall(args []string) int {
 	return 0
 }
 
-func performAtomicUpgrade(latestTag string) error {
-	execPath, err := os.Executable()
-	if err != nil || execPath == "" {
-		home, _ := os.UserHomeDir()
-		execPath = filepath.Join(home, ".local", "bin", "cogni")
-	}
-	execPath, _ = filepath.EvalSymlinks(execPath)
-	binDir := filepath.Dir(execPath)
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		return err
-	}
-
-	platform := fmt.Sprintf("%s_%s", runtime.GOOS, runtime.GOARCH)
-	downloadURL := fmt.Sprintf("https://github.com/AdelysAlberto/cogni-memory/releases/download/%s/cogni_%s", latestTag, platform)
-
-	tempFile, err := os.CreateTemp(binDir, "cogni.tmp.*")
-	if err != nil {
-		return fmt.Errorf("creando archivo temporal: %w", err)
-	}
-	tempPath := tempFile.Name()
-
-	cleanedUp := false
-	cleanup := func() {
-		if !cleanedUp {
-			cleanedUp = true
-			_ = tempFile.Close()
-			_ = os.Remove(tempPath)
-		}
-	}
-	defer cleanup()
-
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(sigChan)
-
-	done := make(chan error, 1)
-	go func() {
-		select {
-		case <-sigChan:
-			cleanup()
-			fmt.Println("\n⏭️ Actualización cancelada por el usuario. La versión actual se mantiene intacta.")
-			os.Exit(0)
-		case <-done:
-			return
-		}
-	}()
-
-	client := &http.Client{Timeout: 90 * time.Second}
-	resp, err := client.Get(downloadURL)
-	if err != nil {
-		done <- err
-		return fmt.Errorf("descargando release: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		err := fmt.Errorf("código HTTP %d al descargar binario desde GitHub", resp.StatusCode)
-		done <- err
-		return err
-	}
-
-	if _, err := io.Copy(tempFile, resp.Body); err != nil {
-		done <- err
-		return fmt.Errorf("escribiendo binario: %w", err)
-	}
-	_ = tempFile.Close()
-
-	if err := os.Chmod(tempPath, 0755); err != nil {
-		done <- err
-		return err
-	}
-
-	if runtime.GOOS == "darwin" {
-		_ = exec.Command("xattr", "-d", "com.apple.quarantine", tempPath).Run()
-		_ = exec.Command("codesign", "-s", "-", "-f", tempPath).Run()
-	}
-
-	// Atomic rename swap
-	oldPath := filepath.Join(binDir, fmt.Sprintf("cogni.old.%d", time.Now().UnixNano()))
-	_ = os.Rename(execPath, oldPath)
-	if err := os.Rename(tempPath, execPath); err != nil {
-		_ = os.Rename(oldPath, execPath) // rollback
-		done <- err
-		return fmt.Errorf("reemplazando binario: %w", err)
-	}
-	_ = os.Remove(oldPath)
-	cleanedUp = true
-	done <- nil
-
-	return nil
-}
-
 func handleUpgrade(args []string) int {
 	fmt.Println("🔍 Comprobando actualizaciones por tags en GitHub (AdelysAlberto/cogni-memory)...")
 
@@ -1296,7 +811,7 @@ func handleUpgrade(args []string) int {
 	}
 
 	current := "v" + strings.TrimPrefix(Version, "v")
-	current = strings.Fields(current)[0] // Clean extra suffixes if any
+	current = strings.Split(current, " ")[0] // Clean extra suffixes if any
 	latest := "v" + strings.TrimPrefix(latestTag, "v")
 
 	fmt.Printf("• Versión local:  %s\n", current)
@@ -1317,36 +832,15 @@ func handleUpgrade(args []string) int {
 	fmt.Printf("\n🚀 ¡Nueva versión disponible: %s! (%s)\n", latest, releaseURL)
 	fmt.Println("📥 Descargando e instalando actualización...")
 
-	if err := performAtomicUpgrade(latest); err != nil {
-		fmt.Fprintf(os.Stderr, "⚠️ Falló la actualización atómica directa: %v\n", err)
-		fmt.Println("🔄 Intentando mediante script de instalación como fallback...")
-
-		cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh | bash")
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "❌ Error durante la actualización: %v\n", err)
-			return 1
-		}
-	} else {
-		// Auto-actualizar skills y reglas de los arneses configurados sin fricción
-		home, _ := os.UserHomeDir()
-		if home != "" {
-			promptAndInstallSkills("", true)
-		}
+	cmd := exec.Command("bash", "-c", "curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh | bash")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "❌ Error durante la actualización: %v\n", err)
+		return 1
 	}
 
-	if runtime.GOOS == "darwin" {
-		home, _ := os.UserHomeDir()
-		appPath := filepath.Join(home, "Applications", "CogniBar.app")
-		if dirExists(appPath) {
-			_ = exec.Command("pkill", "-x", "CogniBar").Run()
-			_ = exec.Command("open", appPath).Run()
-		}
-	}
-
-	fmt.Printf("\n🎉 ¡Cogni ha sido actualizado con éxito a la versión %s!\n", latest)
+	fmt.Printf("🎉 ¡Cogni ha sido actualizado con éxito a la versión %s!\n", latest)
 	return 0
 }
 

@@ -63,6 +63,36 @@ cogni bar
 bash <(curl -fsSL https://raw.githubusercontent.com/AdelysAlberto/cogni-memory/main/install.sh)
 ```
 
+#### System Tray (Bandeja del sistema) en Linux
+Para que `cogni tray` / `cogni bar` funcione con icono nativo en la bandeja del sistema, necesitas las librerías GTK + AppIndicator:
+
+**Ubuntu / Debian (20.04+):**
+```bash
+sudo apt-get install pkg-config libgtk-3-dev libayatana-appindicator3-dev
+```
+
+**Ubuntu 18.04 / Debian 10 (Buster):**
+```bash
+sudo apt-get install pkg-config libgtk-3-dev libappindicator3-dev
+```
+
+**Fedora:**
+```bash
+sudo dnf install pkg-config gtk3-devel libayatana-appindicator-gtk3-devel
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S pkg-config gtk3 libayatana-appindicator
+```
+
+**Alpine:**
+```bash
+apk add pkgconfig gtk+3.0-dev libayatana-appindicator-dev
+```
+
+> **Sin estas librerías**: el comando `cogni tray` compilará pero usará el *fallback* (sugiere `cogni ui` para abrir el dashboard web). El motor de memoria y todas las demás funcionalidades funcionan sin ellas.
+
 ### Windows (PowerShell / WSL)
 
 En **PowerShell**:
