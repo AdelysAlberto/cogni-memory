@@ -195,6 +195,8 @@ Cogni implementa la especificacion completa de Model Context Protocol (MCP 2024-
 * **`cogni_session_summary(goal, accomplished, discoveries, next_steps, relevant_files)`**: Persistencia de progreso al finalizar sesion o tras compactacion.
 * **`cogni_stats()`**: Auditoria de salud de memoria y tokens reales ahorrados.
 
+Las categorias publicadas por `cogni_save` y `cogni_search` son `bugfix`, `architecture`, `refactor`, `decision`, `discovery`, `config`, `pattern`, `preference` y `general`. Usen `refactor` para reorganizaciones de codigo que mantienen el comportamiento; `config` para cambios de configuracion y `architecture` para decisiones estructurales.
+
 ### 2. Recursos Pasivos (Resources)
 Permiten a los clientes MCP inyectar contexto directamente al prompt de usuario sin consumir llamadas activas de herramientas:
 * **`cogni://context/recent`**: Contexto activo reciente y firmas arquitectonicas del workspace en formato JSON.

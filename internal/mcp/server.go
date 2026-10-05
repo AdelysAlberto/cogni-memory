@@ -304,6 +304,10 @@ func (s *Server) sendError(w io.Writer, id any, code int, message string) {
 	_, _ = fmt.Fprintf(w, "%s\n", string(data))
 }
 
+func memoryCategories() []string {
+	return []string{"bugfix", "architecture", "refactor", "decision", "discovery", "config", "pattern", "preference", "general"}
+}
+
 func (s *Server) getToolsList() []Tool {
 	additionalPropsFalse := false
 
@@ -325,8 +329,8 @@ func (s *Server) getToolsList() []Tool {
 					},
 					"category": {
 						Type:        "string",
-						Description: "Filter by memory category (bugfix, architecture, decision, discovery, config, pattern, preference, general).",
-						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
+						Description: "Filter by memory category (" + strings.Join(memoryCategories(), ", ") + ").",
+						Enum:        memoryCategories(),
 					},
 					"all_projects": {
 						Type:        "boolean",
@@ -400,7 +404,7 @@ func (s *Server) getToolsList() []Tool {
 					"category": {
 						Type:        "string",
 						Description: "Memory classification category.",
-						Enum:        []string{"bugfix", "architecture", "decision", "discovery", "config", "pattern", "preference", "general"},
+						Enum:        memoryCategories(),
 					},
 					"tags": {
 						Description: "Tags in 3 tiers. Can be a comma-separated string (e.g. 'auth,jwt,tokens') or an array of tag strings.",

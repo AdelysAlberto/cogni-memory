@@ -28,7 +28,7 @@ func TestMCPServerToolsAndResources(t *testing.T) {
 	saveStructuredArgs := map[string]any{
 		"title":     "JWT Refresh Flow",
 		"topic_key": "arch/auth/jwt",
-		"category":  "architecture",
+		"category":  "refactor",
 		"tags":      []string{"auth", "jwt", "security"},
 		"what":      "Implemented refresh token rotation",
 		"why":       "Security audit",
@@ -47,8 +47,9 @@ func TestMCPServerToolsAndResources(t *testing.T) {
 
 	// 2. Test cogni_search (2-step protocol, step 1)
 	searchArgs := map[string]any{
-		"query":   "refresh",
-		"project": "test-project",
+		"query":    "refresh",
+		"project":  "test-project",
+		"category": "refactor",
 	}
 	searchBytes, _ := json.Marshal(searchArgs)
 	searchRes, isErr := server.executeTool("cogni_search", searchBytes)
@@ -72,12 +73,15 @@ func TestMCPServerToolsAndResources(t *testing.T) {
 	if !strings.Contains(getRes, "What: Implemented refresh token rotation") {
 		t.Errorf("Expected get result to contain full structured summary, got: %s", getRes)
 	}
+	if !strings.Contains(getRes, "Category: refactor") {
+		t.Errorf("Expected persisted refactor category, got: %s", getRes)
+	}
 
 	// 4. Test cogni_save upsert behavior with same topic_key
 	updateSaveArgs := map[string]any{
 		"title":     "JWT Refresh Flow V2",
 		"topic_key": "arch/auth/jwt",
-		"category":  "architecture",
+		"category":  "refactor",
 		"tags":      "auth,jwt,security,v2",
 		"summary":   "What: Updated refresh token rotation with Redis blacklist | Why: Scale | Where: auth/jwt.go | Learned: Redis TTL auto cleans",
 		"project":   "test-project",
@@ -89,7 +93,10 @@ func TestMCPServerToolsAndResources(t *testing.T) {
 	}
 
 	// Verify get returns updated data
-	getRes2, _ := server.executeTool("cogni_get", getBytes)
+	getRes2, isErr := server.executeTool("cogni_get", getBytes)
+	if isErr || !strings.Contains(getRes2, "Category: refactor") {
+		t.Fatalf("Expected persisted refactor category after upsert, got: %s", getRes2)
+	}
 	if !strings.Contains(getRes2, "JWT Refresh Flow V2") {
 		t.Errorf("Expected upserted title in get result, got: %s", getRes2)
 	}
@@ -238,4 +245,3 @@ func TestMCPServerJSONRPCProtocol(t *testing.T) {
 		t.Errorf("Expected -32601 Method Not Found error, got: %s", buf.String())
 	}
 }
-
