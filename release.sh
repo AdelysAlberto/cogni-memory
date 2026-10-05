@@ -1,12 +1,25 @@
 #!/usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 TYPE="${1:-patch}"
 
 if [[ "$TYPE" != "patch" && "$TYPE" != "minor" && "$TYPE" != "major" ]]; then
     echo "❌ Tipo de versión inválido: $TYPE"
     echo "Uso: ./release.sh [patch|minor|major]"
+    exit 1
+fi
+
+REPOSITORY="AdelysAlberto/cogni-memory"
+
+if ! command -v gh &>/dev/null; then
+    echo "Error: GitHub CLI (gh) es obligatorio para publicar los binarios."
+    echo "Instalen gh: https://cli.github.com/ y ejecuten: gh auth login"
+    exit 1
+fi
+
+if ! gh auth status --hostname github.com &>/dev/null; then
+    echo "Error: falta autenticacion de GitHub. Ejecuten: gh auth login"
     exit 1
 fi
 
@@ -70,21 +83,19 @@ case "$PLATFORM_ARCH" in
 esac
 cp "bin/cogni_${PLATFORM_OS}_${PLATFORM_ARCH}" bin/cogni
 
-# Si gh CLI está disponible, podemos crear un release en GitHub con los binarios
 echo "📌 Creando git tag ${NEW_TAG}..."
-git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}" 2>/dev/null || true
+git tag -a "${NEW_TAG}" -m "Release ${NEW_TAG}"
 
 echo "🚀 Subiendo cambios y tag a GitHub..."
 git push origin main
 git push origin "${NEW_TAG}"
 
-if command -v gh &>/dev/null; then
-    echo "📦 Subiendo Release a GitHub y adjuntando binarios multiplataforma..."
-    EXTRA_ASSETS=""
-    if [ -f "macos/dist/CogniBar.dmg" ]; then
-        EXTRA_ASSETS="macos/dist/CogniBar.dmg"
-    fi
-    gh release create "${NEW_TAG}" bin/cogni_* $EXTRA_ASSETS --title "${NEW_TAG}" --notes "Release ${NEW_TAG}" || true
+echo "📦 Subiendo Release borrador a GitHub y adjuntando binarios multiplataforma..."
+ASSETS=(bin/cogni_darwin_arm64 bin/cogni_darwin_amd64 bin/cogni_linux_amd64 bin/cogni_linux_arm64)
+if [[ -f "macos/dist/CogniBar.dmg" ]]; then
+    ASSETS+=(macos/dist/CogniBar.dmg)
 fi
+gh release create "${NEW_TAG}" "${ASSETS[@]}" --repo "$REPOSITORY" --verify-tag --draft --title "${NEW_TAG}" --notes "Release ${NEW_TAG}"
+gh release edit "${NEW_TAG}" --repo "$REPOSITORY" --draft=false --latest
 
 echo "✅ ¡Release ${NEW_TAG} publicado con éxito!"
